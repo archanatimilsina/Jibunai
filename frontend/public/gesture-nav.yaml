@@ -1,0 +1,27 @@
+
+score_threshold: 0.70
+
+gestures:
+  - gesture: circle
+    route: /skills
+    label: Skills
+
+  - gesture: triangle
+    route: /projects
+    label: Projects
+
+  - gesture: check
+    route: /experience
+    label: Experience
+
+  - gesture: caret
+    route: /contact
+    label: Contact
+
+  - gesture: pigtail
+    route: /about
+    label: About
+
+  - gesture: arrow
+    route: /
+    label: Home

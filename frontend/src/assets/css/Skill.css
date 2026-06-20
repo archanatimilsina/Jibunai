@@ -1,0 +1,94 @@
+/* #skill{
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+}
+/* .programmingLanguage{
+    width: 100%;
+    height:100%;
+}
+.programmingLanguage h2,.tools h2{
+    background-color: white;
+    border-radius: 20px;
+    /* margin: 50px 0 10px 20px; */
+    /* width: fit-content;
+    padding: 9px;
+   text-align: center;
+   margin:20px;
+} */ 
+/* .skillSliderBox{
+    width: fit-content;
+    border-radius: 30px;
+    overflow-x: auto;
+    scroll-behavior: smooth;
+    padding: 20px;
+    background-color: white;
+    backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    box-shadow: 0px 5px 15px rgba(0,0,0,0.1);
+
+}
+.languageItem{
+ min-width: 150px;
+height: 150px;
+background-color: #F7CFD8;
+margin: 20px 40px 20px 0;
+border-radius: 20px;
+display: flex;
+flex-direction: column;
+box-shadow: 0px 5px 15px rgba(0,0,0,0.1);
+ transition: transform 0.3s, box-shadow 0.3s;
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+}
+.languageItem:hover{
+ transform: translateY(-10px);
+  box-shadow: 0px 15px 25px rgba(0,0,0,0.2);
+}
+.languageLogo
+{
+    width: 90px;
+    margin: auto;
+    height: 90px;
+background-color: #F7CFD8;
+    border-radius: 50%;
+    margin: 20px auto;
+
+}
+.languageLogo img{
+width: 100%;
+height: 100%;
+border-radius: 50%;
+
+}
+.languageName
+{
+    font-size: 25px;
+    font-weight: 500;
+    text-align: center;
+}
+
+.languageName {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .languageItem {
+    width: 120px;
+    height: 120px;
+  }
+  .languageLogo img {
+    width: 40px;
+    height: 40px;
+  }
+} */ 

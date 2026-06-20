@@ -1,0 +1,324 @@
+<h2 class="sr-only">Drawing practice canvas — draw freely and see the points your strokes make</h2>
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--color-background-primary); }
+
+  #toolbar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 12px 16px;
+    border-bottom: 0.5px solid var(--color-border-tertiary);
+    background: var(--color-background-primary);
+  }
+  .tb-label {
+    font-size: 12px; color: var(--color-text-secondary); letter-spacing: 0.02em;
+  }
+  .color-btn {
+    width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent;
+    cursor: pointer; transition: transform 0.1s;
+  }
+  .color-btn.active { border-color: var(--color-text-primary); transform: scale(1.2); }
+  .size-btn {
+    border: 0.5px solid var(--color-border-secondary);
+    border-radius: 6px; padding: 4px 10px; cursor: pointer;
+    font-size: 12px; background: transparent; color: var(--color-text-secondary);
+    transition: background 0.15s;
+  }
+  .size-btn.active {
+    background: var(--color-background-secondary);
+    color: var(--color-text-primary);
+    border-color: var(--color-border-primary);
+  }
+  .tb-sep { width: 0.5px; height: 20px; background: var(--color-border-tertiary); margin: 0 2px; }
+  #clear-btn {
+    margin-left: auto;
+    border: 0.5px solid var(--color-border-secondary);
+    border-radius: 6px; padding: 4px 12px; cursor: pointer;
+    font-size: 12px; background: transparent; color: var(--color-text-secondary);
+  }
+  #clear-btn:hover { background: var(--color-background-secondary); color: var(--color-text-primary); }
+
+  #show-points-btn {
+    border: 0.5px solid var(--color-border-secondary);
+    border-radius: 6px; padding: 4px 12px; cursor: pointer;
+    font-size: 12px; background: transparent; color: var(--color-text-secondary);
+  }
+  #show-points-btn.active {
+    background: var(--color-background-info);
+    color: var(--color-text-info);
+    border-color: var(--color-border-info);
+  }
+
+  #canvas-wrap {
+    position: relative;
+    width: 100%;
+    height: 500px;
+    background: #fff;
+    border-bottom: 0.5px solid var(--color-border-tertiary);
+    cursor: crosshair;
+    overflow: hidden;
+  }
+  #draw-canvas { position: absolute; inset: 0; touch-action: none; }
+  #point-canvas { position: absolute; inset: 0; pointer-events: none; }
+
+  #stats-bar {
+    display: flex; gap: 24px; padding: 10px 16px;
+    border-bottom: 0.5px solid var(--color-border-tertiary);
+    background: var(--color-background-secondary);
+  }
+  .stat { display: flex; flex-direction: column; gap: 1px; }
+  .stat-label { font-size: 11px; color: var(--color-text-tertiary); }
+  .stat-val { font-size: 14px; font-weight: 500; color: var(--color-text-primary); }
+
+  #points-table-wrap {
+    max-height: 180px; overflow-y: auto; padding: 12px 16px;
+  }
+  #points-table-wrap h3 {
+    font-size: 12px; color: var(--color-text-secondary);
+    margin-bottom: 8px; font-weight: 500;
+  }
+  #points-list {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .point-pill {
+    font-size: 11px; font-family: var(--font-mono);
+    background: var(--color-background-secondary);
+    border: 0.5px solid var(--color-border-tertiary);
+    border-radius: 4px; padding: 2px 7px;
+    color: var(--color-text-secondary);
+  }
+  .point-pill.first { border-color: var(--color-border-info); color: var(--color-text-info); background: var(--color-background-info); }
+  .point-pill.last { border-color: var(--color-border-success); color: var(--color-text-success); background: var(--color-background-success); }
+
+  #hint {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  #hint span {
+    font-size: 13px; color: var(--color-text-tertiary);
+    border: 0.5px dashed var(--color-border-tertiary);
+    padding: 8px 18px; border-radius: 20px;
+  }
+</style>
+
+<div id="toolbar">
+  <span class="tb-label">Color</span>
+  <button class="color-btn active" data-color="#1a1a2e" style="background:#1a1a2e;" title="Dark"></button>
+  <button class="color-btn" data-color="#185FA5" style="background:#185FA5;" title="Blue"></button>
+  <button class="color-btn" data-color="#0F6E56" style="background:#0F6E56;" title="Teal"></button>
+  <button class="color-btn" data-color="#993C1D" style="background:#993C1D;" title="Coral"></button>
+  <button class="color-btn" data-color="#993556" style="background:#993556;" title="Pink"></button>
+
+  <div class="tb-sep"></div>
+  <span class="tb-label">Size</span>
+  <button class="size-btn" data-size="2">thin</button>
+  <button class="size-btn active" data-size="3">mid</button>
+  <button class="size-btn" data-size="6">thick</button>
+
+  <div class="tb-sep"></div>
+  <button id="show-points-btn" title="Toggle point dots overlay">show points</button>
+  <button id="clear-btn"><i class="ti ti-trash" aria-hidden="true"></i> clear</button>
+</div>
+
+<div id="canvas-wrap">
+  <canvas id="draw-canvas"></canvas>
+  <canvas id="point-canvas"></canvas>
+  <div id="hint"><span>draw anything here</span></div>
+</div>
+
+<div id="stats-bar">
+  <div class="stat"><span class="stat-label">strokes</span><span class="stat-val" id="s-strokes">0</span></div>
+  <div class="stat"><span class="stat-label">total points</span><span class="stat-val" id="s-points">0</span></div>
+  <div class="stat"><span class="stat-label">this stroke</span><span class="stat-val" id="s-current">—</span></div>
+  <div class="stat"><span class="stat-label">last point</span><span class="stat-val" id="s-last">—</span></div>
+</div>
+
+<div id="points-table-wrap" style="display:none;">
+  <h3>Points in last stroke</h3>
+  <div id="points-list"></div>
+</div>
+
+<script>
+  const drawCanvas  = document.getElementById('draw-canvas');
+  const pointCanvas = document.getElementById('point-canvas');
+  const wrap        = document.getElementById('canvas-wrap');
+  const hint        = document.getElementById('hint');
+  const dCtx        = drawCanvas.getContext('2d');
+  const pCtx        = pointCanvas.getContext('2d');
+
+  let strokeColor   = '#1a1a2e';
+  let strokeSize    = 3;
+  let showPoints    = false;
+  let drawing       = false;
+  let allStrokes    = [];
+  let currentPoints = [];
+  let totalPoints   = 0;
+
+  function resize() {
+    const W = wrap.clientWidth;
+    const H = wrap.clientHeight;
+    [drawCanvas, pointCanvas].forEach(c => {
+      c.width  = W;
+      c.height = H;
+    });
+    redrawAll();
+  }
+
+  function redrawAll() {
+    dCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    allStrokes.forEach(s => drawStroke(dCtx, s.pts, s.color, s.size));
+    if (showPoints) redrawPointDots();
+  }
+
+  function redrawPointDots() {
+    pCtx.clearRect(0, 0, pointCanvas.width, pointCanvas.height);
+    if (!showPoints) return;
+    allStrokes.forEach(s => {
+      s.pts.forEach((p, i) => {
+        pCtx.beginPath();
+        pCtx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        pCtx.fillStyle = i === 0 ? '#185FA5'
+                       : i === s.pts.length - 1 ? '#0F6E56'
+                       : 'rgba(180,100,60,0.7)';
+        pCtx.fill();
+      });
+    });
+  }
+
+  function drawStroke(ctx, pts, color, size) {
+    if (pts.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = size;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.stroke();
+  }
+
+  function getPos(e) {
+    const r   = drawCanvas.getBoundingClientRect();
+    const src = e.touches ? e.touches[0] : e;
+    return { x: Math.round(src.clientX - r.left), y: Math.round(src.clientY - r.top) };
+  }
+
+  function updateStats() {
+    document.getElementById('s-strokes').textContent  = allStrokes.length;
+    document.getElementById('s-points').textContent   = totalPoints;
+    const cur = currentPoints.length;
+    document.getElementById('s-current').textContent  = drawing ? cur : (allStrokes.length ? allStrokes[allStrokes.length-1].pts.length : '—');
+    const last = currentPoints.length ? currentPoints[currentPoints.length-1] : (allStrokes.length && allStrokes[allStrokes.length-1].pts.length ? allStrokes[allStrokes.length-1].pts[allStrokes[allStrokes.length-1].pts.length-1] : null);
+    document.getElementById('s-last').textContent = last ? `${last.x}, ${last.y}` : '—';
+  }
+
+  function showPointsList(pts) {
+    const wrap2 = document.getElementById('points-table-wrap');
+    if (!showPoints) { wrap2.style.display = 'none'; return; }
+    wrap2.style.display = 'block';
+    const list = document.getElementById('points-list');
+    list.innerHTML = '';
+    pts.forEach((p, i) => {
+      const pill = document.createElement('span');
+      pill.className = 'point-pill' + (i === 0 ? ' first' : i === pts.length-1 ? ' last' : '');
+      pill.textContent = `${p.x},${p.y}`;
+      list.appendChild(pill);
+    });
+  }
+
+  drawCanvas.addEventListener('pointerdown', e => {
+    drawing = true;
+    currentPoints = [getPos(e)];
+    hint.style.display = 'none';
+    dCtx.beginPath();
+    dCtx.moveTo(currentPoints[0].x, currentPoints[0].y);
+    updateStats();
+  });
+
+  drawCanvas.addEventListener('pointermove', e => {
+    if (!drawing) return;
+    const p = getPos(e);
+    currentPoints.push(p);
+    dCtx.lineTo(p.x, p.y);
+    dCtx.strokeStyle = strokeColor;
+    dCtx.lineWidth   = strokeSize;
+    dCtx.lineCap     = 'round';
+    dCtx.lineJoin    = 'round';
+    dCtx.stroke();
+    dCtx.beginPath();
+    dCtx.moveTo(p.x, p.y);
+    if (showPoints) {
+      pCtx.beginPath();
+      pCtx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+      pCtx.fillStyle = 'rgba(180,100,60,0.7)';
+      pCtx.fill();
+    }
+    updateStats();
+  });
+
+  drawCanvas.addEventListener('pointerup', e => {
+    if (!drawing) return;
+    drawing = false;
+    if (currentPoints.length > 0) {
+      allStrokes.push({ pts: [...currentPoints], color: strokeColor, size: strokeSize });
+      totalPoints += currentPoints.length;
+      showPointsList(currentPoints);
+      if (showPoints) {
+        const pts = currentPoints;
+        [0, pts.length - 1].forEach((i, idx) => {
+          pCtx.beginPath();
+          pCtx.arc(pts[i].x, pts[i].y, 4, 0, Math.PI * 2);
+          pCtx.fillStyle = idx === 0 ? '#185FA5' : '#0F6E56';
+          pCtx.fill();
+        });
+      }
+    }
+    currentPoints = [];
+    updateStats();
+  });
+
+  document.querySelectorAll('.color-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      strokeColor = btn.dataset.color;
+    });
+  });
+
+  document.querySelectorAll('.size-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      strokeSize = parseInt(btn.dataset.size);
+    });
+  });
+
+  document.getElementById('show-points-btn').addEventListener('click', function() {
+    showPoints = !showPoints;
+    this.classList.toggle('active', showPoints);
+    if (!showPoints) {
+      pCtx.clearRect(0, 0, pointCanvas.width, pointCanvas.height);
+      document.getElementById('points-table-wrap').style.display = 'none';
+    } else {
+      redrawPointDots();
+      if (allStrokes.length) showPointsList(allStrokes[allStrokes.length-1].pts);
+    }
+  });
+
+  document.getElementById('clear-btn').addEventListener('click', () => {
+    allStrokes    = [];
+    totalPoints   = 0;
+    currentPoints = [];
+    dCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    pCtx.clearRect(0, 0, pointCanvas.width, pointCanvas.height);
+    hint.style.display = 'flex';
+    document.getElementById('points-list').innerHTML = '';
+    document.getElementById('points-table-wrap').style.display = 'none';
+    updateStats();
+  });
+
+  resize();
+  window.addEventListener('resize', resize);
+  updateStats();
+</script>
