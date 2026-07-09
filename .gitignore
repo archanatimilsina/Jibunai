@@ -5,9 +5,9 @@ frontend/DS_Store
 .env
 .env.local
 
-frontend/node_modules/
-frontend/dist/
-fronted/build/
+/frontend/node_modules/
+/frontend/dist/
+/frontend/build/
 .env.development.local
 .env.test.local
 .env.production.local
@@ -22,4 +22,4 @@ fronted/build/
 /backend/Dockerfile
 /backend/seed.py
 .DS_Store
-backend/data.json
+/backend/data.json
