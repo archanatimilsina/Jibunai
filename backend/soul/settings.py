@@ -10,45 +10,42 @@ DATABASES = {
         conn_max_age=600,
     )
 }
+DATABASES['default']['OPTIONS'] = {'options': '-c search_path=jibunai'}
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STORAGES = {
     "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "BACKEND": "soul.storage.FileSystemStorage",
     },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
-SUPABASE_URL = os.environ.get('SUPABASE_URL')
+SUPABASE_URL = os.environ.get('DATABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
-SUPABASE_BUCKET_NAME = 'media'
+SUPABASE_BUCKET_NAME = 'jibunai'
 
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-%iqt3zz$7vqaa&ih!*gjqw5#pg!!ezkd!fve(y*hvuo^(u*4ju'
 
-# SECURITY WARNING: don't run with debug turned on in production!
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    'https://portfolio-79vi.onrender.com',
-    'archana-timilsina.com.np',
-    'www.archana-timilsina.com.np',
-    'portfolio-79vi.onrender.com'
+'https://jibunai.onrender.com',
+'http://localhost:8000'
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    "https://portfolio-mtv31atuo-archanatimilsinas-projects.vercel.app",        
-    "https://archana-timilsina.com.np",   
     "http://localhost:5173",
     "http://localhost:3000",
+    "https://jibunai.vercel.app"
+
 ]
 # Application definition
 
@@ -98,15 +95,6 @@ TEMPLATES = [
 WSGI_APPLICATION = 'soul.wsgi.application'
 
 
-# Database
-# https://docs.djangoproject.com/en/6.0/ref/settings/#databases
-
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
 
 
 # Password validation

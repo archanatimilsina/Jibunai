@@ -1,25 +1,12 @@
 from django.contrib import admin
-from .models import (
-    ProfessionalDevelopment, Project, AboutMe, DayLog, 
+from .models import ( AboutMe, DayLog, 
     ScrapbookStamp, OperativeNote, DreamWish, WatchlistItem, 
     OperativeGoal, HobbyItem, MusicVibeItem, Task
 )
 
-@admin.register(ProfessionalDevelopment)
-class ProfessionalDevelopmentAdmin(admin.ModelAdmin):
-    list_display = ('name', 'subject', 'company', 'duration', 'certificate_image')
-    list_filter = ('name', 'company')
-    search_fields = ('subject', 'company')
-
-@admin.register(Project)
-class ProjectAdmin(admin.ModelAdmin):
-    list_display = ('name', 'project_type', 'tech', 'github_link', 'created_at')
-    list_filter = ('project_type', 'created_at')
-    search_fields = ('name', 'tech')
-
 @admin.register(AboutMe)
 class AboutMeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'email', 'phone', 'base_secret_code', 'clearance_level', 'created_at')
+    list_display = ('name', 'email', 'phone', 'created_at')
     search_fields = ('name', 'email')
 
 @admin.register(DayLog)

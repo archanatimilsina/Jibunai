@@ -1,50 +1,19 @@
 from rest_framework import serializers
-from .models import ProfessionalDevelopment, Project, AboutMe, DayLog, Task, ScrapbookStamp,OperativeNote, DreamWish, WatchlistItem, OperativeGoal,  HobbyItem, MusicVibeItem
+from .models import AboutMe, DayLog, Task, ScrapbookStamp,OperativeNote, DreamWish, WatchlistItem, OperativeGoal,  HobbyItem, MusicVibeItem
 import requests
 from django.core.files.base import ContentFile
 from urllib.parse import urlparse
 import os
 
- 
-class ProjectSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Project
-        fields = '__all__'
-
-
-class ProfessionalDevelopmentSerializer(serializers.ModelSerializer):
-    certificate_image_url = serializers.SerializerMethodField()
-
-    class Meta:
-        model = ProfessionalDevelopment
-        fields = [
-            'id', 'name', 'subject', 'company', 'duration',
-            'certificate_image', 'certificate_image_url',
-            'learnings', 'skills_acquired',
-        ]
-
-    def get_certificate_image_url(self, obj):
-        if obj.certificate_image:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.certificate_image.url)
-            return obj.certificate_image.url
-        return None
 
 
 class AboutMeSerializer(serializers.ModelSerializer):
-    baseSecretCode = serializers.CharField(source='base_secret_code')
-    sidebarCode = serializers.CharField(source='sidebar_code', required=False, allow_blank=True)
-    portalDream = serializers.CharField(source='portal_dream')
-    clearanceLevel = serializers.CharField(source='clearance_level', required=False)
     timestamp = serializers.DateTimeField(source='created_at', read_only=True)
 
     class Meta:
         model = AboutMe
         fields = [
-            'id', 'name', 'address', 'phone', 'email', 
-            'baseSecretCode', 'sidebarCode', 'portalDream',
-            'clearanceLevel', 'timestamp'
+            'id', 'name', 'address', 'phone', 'email','timestamp'
         ]
     
 

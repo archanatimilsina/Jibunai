@@ -7,101 +7,6 @@ from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import MinValueValidator, MaxValueValidator
 
-class ProfessionalDevelopment(models.Model):
-    DEVELOPMENT_TYPES = [
-        ('Mentorship', 'Mentorship'),
-        ('Internship', 'Internship'),
-        ('Course', 'Course'),
-        ('Fellowship', 'Fellowship'),
-        ('Session', 'Session'),
-        ('Online Course', 'Online Course'),
-    ]
-    
-    name = models.CharField(
-        max_length=50, 
-        choices=DEVELOPMENT_TYPES,
-    )
-    
-    subject = models.CharField(
-        max_length=200,
-    )
-    company = models.CharField(
-        max_length=100,
-    )
-    duration = models.CharField(
-        max_length=100,  
-    )
-    certificate_image = models.ImageField(
-    upload_to='certificates/',
-    blank=True,
-    null=True,
-)
-    
-    learnings = models.JSONField(
-        default=list,
-        blank=True,
-   )
-    skills_acquired = models.JSONField(
-        default=list,
-        blank=True,
-    )
-    
-    class Meta:
-        verbose_name = "Professional Development"
-
-    def __str__(self):
-        return f"{self.name} in {self.subject} at {self.company}"
-    
-
-class Project(models.Model):
-    PROJECT_TYPES = [
-        ('solo', 'Solo'),
-        ('group', 'Group'),
-        ('academic', 'Academic'),
-        ('open_source', 'Open Source'),
-    ]
-
-    name = models.CharField(
-        max_length=100, 
-        unique=True,
-    )
-    tech = models.CharField(
-        max_length=150,
-    )
-    project_type = models.CharField(
-        max_length=50,
-        choices=PROJECT_TYPES,
-        default='solo',
-    )
-    description = models.TextField(
-        blank=True, 
-        null=True,
-    )
-    tech_stack = models.JSONField(
-        default=dict,
-        blank=True,
-    )
-    features = models.JSONField(
-        default=list,
-        blank=True,
-    )
-    github_link = models.URLField(
-        max_length=500,
-        blank=True,
-        null=True,
-    )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-    )
-
-    class Meta:
-        ordering = ['created_at']  
-
-    def __str__(self):
-        return self.name
-    
-
-
 
 class AboutMe(models.Model):
     name = models.CharField(
@@ -119,22 +24,6 @@ class AboutMe(models.Model):
         blank=True, 
         null=True, 
     )
-
-    base_secret_code = models.CharField(
-        max_length=4, 
-    )
-    sidebar_code = models.CharField(
-        max_length=100, 
-        blank=True, 
-        null=True, 
-    )
-    portal_dream = models.TextField(
-    )
-
-    clearance_level = models.CharField(
-        max_length=50, 
-        default="ALPHA-9",
-    )
     created_at = models.DateTimeField(
         auto_now_add=True, 
     )
@@ -142,9 +31,9 @@ class AboutMe(models.Model):
     class Meta:
         ordering = ['-created_at']
 
-    def __str__(self):
-        return f"{self.name} ({self.clearance_level})"
     
+
+
 class DayLog(models.Model):
     MOOD_CHOICES = [
         ('Happy', 'Happy'),
@@ -183,7 +72,6 @@ class DayLog(models.Model):
         max_length=10, 
         choices=SOURCE_CHOICES, 
         default='remote',
-  
     )
     
     created_at = models.DateTimeField(
@@ -201,6 +89,7 @@ def scrapbook_upload_path(instance, filename):
     ext = filename.split('.')[-1]
     filename = f"{uuid.uuid4()}.{ext}"
     return os.path.join('scrapbook', filename)
+
 
 
 
@@ -235,9 +124,6 @@ def auto_delete_file_on_delete(sender, instance, **kwargs):
     if instance.image:
         if os.path.isfile(instance.image.path):
             os.remove(instance.image.path)
-
-
-
 
 
 class OperativeNote(models.Model):

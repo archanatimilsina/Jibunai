@@ -1,11 +1,7 @@
 from django.urls import path
-from .views import ProjectDetailView, ProfessionalDevelopmentListView, TaskRetrieveUpdateDestroyAPIView, TaskListCreateAPIView, projectListView, ProfessionalDevelopmentDetailView, AboutMeListCreateView, AboutMeRetrieveUpdateDestroyView, DayLogListCreateView, DayLogDetailView, ScrapbookArchiveAPIView, ScrapbookStampDetailAPIView, NoteListCreateAPIView, NoteRetrieveUpdateDestroyAPIView, DreamWishListCreateAPIView, DreamWishDetailAPIView, WatchlistItemListCreateAPIView, WatchlistItemRetrieveUpdateDestroyAPIView, GoalListCreateAPIView, VerifySecretView, GoalRetrieveUpdateDestroyAPIView, HobbyListCreateAPIView, HobbyRetrieveUpdateDestroyAPIView, MusicVibeListCreateAPIView, MusicVibeRetrieveUpdateDestroyAPIView
+from .views import TaskRetrieveUpdateDestroyAPIView, TaskListCreateAPIView, AboutMeListCreateView, AboutMeRetrieveUpdateDestroyView, DayLogListCreateView, DayLogDetailView, ScrapbookArchiveAPIView, ScrapbookStampDetailAPIView, NoteListCreateAPIView, NoteRetrieveUpdateDestroyAPIView, DreamWishListCreateAPIView, DreamWishDetailAPIView, WatchlistItemListCreateAPIView, WatchlistItemRetrieveUpdateDestroyAPIView, GoalListCreateAPIView, GoalRetrieveUpdateDestroyAPIView, HobbyListCreateAPIView, HobbyRetrieveUpdateDestroyAPIView, MusicVibeListCreateAPIView, MusicVibeRetrieveUpdateDestroyAPIView
 
 urlpatterns = [
-    path('projectListView/',projectListView.as_view() ),
-    path('projectDetailView/<int:pk>/', ProjectDetailView.as_view()),
-    path('pdListView/',ProfessionalDevelopmentListView.as_view() ),
-    path('pdDetailView/<int:pk>/', ProfessionalDevelopmentDetailView.as_view()),
     path('aboutme', AboutMeListCreateView.as_view(), name='aboutme-list-create'),
     path('aboutme/<int:pk>/', AboutMeRetrieveUpdateDestroyView.as_view(), name='aboutme-detail'),
     path('daylogs/', DayLogListCreateView.as_view(), name='daylog-list-create'),
@@ -25,9 +21,7 @@ urlpatterns = [
     path('music-vibes/', MusicVibeListCreateAPIView.as_view(), name='music-vibe-list-create'),
     path('music-vibes/<int:pk>/', MusicVibeRetrieveUpdateDestroyAPIView.as_view(), name='music-vibe-detail'),
     path('tasks/',        TaskListCreateAPIView.as_view(),          name='task-list-create'),
-    path('tasks/<int:pk>/', TaskRetrieveUpdateDestroyAPIView.as_view(), name='task-detail'),
-    path('verify-secret/', VerifySecretView.as_view(), name='verify-secret'),
- 
+    path('tasks/<int:pk>/', TaskRetrieveUpdateDestroyAPIView.as_view(), name='task-detail'), 
 
 ]
 

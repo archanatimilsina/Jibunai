@@ -1,32 +1,8 @@
-from django.shortcuts import render
 from rest_framework import generics
-from .models import ProfessionalDevelopment, Project, AboutMe, DayLog, OperativeGoal, ScrapbookStamp, OperativeNote, DreamWish, WatchlistItem, HobbyItem, MusicVibeItem, Task
-from .serializers import ProfessionalDevelopmentSerializer, ProjectSerializer, DreamWishSerializer, WatchlistItemSerializer, HobbyItemSerializer, MusicVibeItemSerializer, TaskSerializer, AboutMeSerializer, DayLogSerializer, OperativeNoteSerializer, ScrapbookStampSerializer, DreamWishSerializer, WatchlistItemSerializer, OperativeGoalSerializer
+from .models import  AboutMe, DayLog, OperativeGoal, ScrapbookStamp, OperativeNote, DreamWish, WatchlistItem, HobbyItem, MusicVibeItem, Task
+from .serializers import  DreamWishSerializer, WatchlistItemSerializer, HobbyItemSerializer, MusicVibeItemSerializer, TaskSerializer, AboutMeSerializer, DayLogSerializer, OperativeNoteSerializer, ScrapbookStampSerializer, DreamWishSerializer, WatchlistItemSerializer, OperativeGoalSerializer
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
 
-
-class projectListView(generics.ListCreateAPIView):
-    queryset = Project.objects.all()
-    serializer_class = ProjectSerializer
-
-
-class ProjectDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Project.objects.all()
-    serializer_class = ProjectSerializer
-
-
-class ProfessionalDevelopmentListView(generics.ListCreateAPIView):
-    queryset = ProfessionalDevelopment.objects.all()
-    serializer_class = ProfessionalDevelopmentSerializer
-    parser_classes = [MultiPartParser, FormParser, JSONParser]  
-
-class ProfessionalDevelopmentDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = ProfessionalDevelopment.objects.all()
-    serializer_class = ProfessionalDevelopmentSerializer
-    parser_classes = [MultiPartParser, FormParser, JSONParser] 
 
 class AboutMeListCreateView(generics.ListCreateAPIView):
     queryset = AboutMe.objects.all()
@@ -137,22 +113,3 @@ class TaskRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
  
 
 
-class VerifySecretView(APIView):
-    def post(self, request):
-        field = request.data.get('field') 
-        value = request.data.get('value', '')
-        
-        record = AboutMe.objects.first()
-        if not record:
-            return Response({'allowed': False})
-        
-        if field == 'gate':
-            allowed = value == record.base_secret_code
-        elif field == 'sidebar':
-            allowed = value == record.sidebar_code
-        elif field == 'dream':
-            allowed = value == record.portal_dream
-        else:
-            allowed = False
-            
-        return Response({'allowed': allowed})
