@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import styled, { createGlobalStyle, keyframes, css } from "styled-components";
 
-import Drama from "./dramalist";
+import Drama from "./Dramalist";
 import GalleryPage from "./Gallery";
 import Hobbies  from "./Hobbies";
 import Goals from "./Goals";
@@ -10,8 +10,6 @@ import WishList from "./WishList";
 import MyDayLogPage from './Tellme';
 import ChronosTaskFlow from './TodoArea'
 import AboutMe from './AboutMe';
-// import ProjectsPage from './ProjectDetail';
-// import ProfessionalDevPage from './ProfessionalDev';
 import MusicVibes from './music';
 import GestureDraw from './GestureDraw';
 
@@ -122,8 +120,6 @@ const SECTIONS = [
   { id:"tellme",           icon:"🗣️",  label:"My day",          group:"life"    },
   { id:"todo",             icon:"🏋️",  label:"To do",           group:"life"    },
   { id:"aboutme",          icon:"🥰",  label:"about me",        group:"life"    },
-  // { id:"project",          icon:"👩‍💻",  label:"Project",         group:"life"    },
-  // { id:"professionalDev",  icon:"💆‍♀️",  label:"professionalDev", group:"life"    },
   { id:"music",            icon:"🎧",  label:"music",           group:"life"    },
   { id:"gestureDraw",      icon:"🎨",  label:"GestureDraw",     group:"life"    },
 ];
@@ -157,12 +153,10 @@ function SectionPage({ id, onBack }) {
   if (id === "hobbies")         return <Hobbies            onBack={onBack} />;
   if (id === "notes")           return <Notes              onBack={onBack} />;
   if (id === "wishlist")        return <WishList           onBack={onBack} />;
-  if (id === "dramalist")       return <Drama              onBack={onBack} />;
+  if (id === "drama")       return <Drama              onBack={onBack} />;
   if (id === "tellme")          return <MyDayLogPage       onBack={onBack} />;
   if (id === "todo")            return <ChronosTaskFlow    onBack={onBack} />;
   if (id === "aboutme")         return <AboutMe            onBack={onBack} />;
-  // if (id === "project")         return <ProjectsPage       onBack={onBack} />;
-  // if (id === "professionalDev") return <ProfessionalDevPage onBack={onBack} />;
   if (id === "music")           return <MusicVibes         onBack={onBack} />;
   if (id === "gestureDraw")           return <GestureDraw         onBack={onBack} />;
 

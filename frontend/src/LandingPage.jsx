@@ -173,11 +173,6 @@ export default function LandingPage() {
               </BentoCard>
             ))}
 
-            <CTACard to="/myarea">
-              <CTAIcon>🔑</CTAIcon>
-              <CTALabel>Enter the control room</CTALabel>
-              <CTADesc>Everything above, in one dashboard — plus the private stuff.</CTADesc>
-            </CTACard>
           </BentoGrid>
         </Archive>
 
