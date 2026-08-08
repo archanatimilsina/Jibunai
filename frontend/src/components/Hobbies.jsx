@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled, { keyframes, createGlobalStyle } from 'styled-components';
 const API_BASE = import.meta.env.VITE_API_URL;
-
+export const revalidate = 60;
 const GlobalStyle = createGlobalStyle`
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@300;400&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -59,7 +59,7 @@ export default function Hobbies() {
     setLoading(true);
     setFetchError('');
     try {
-      const res = await fetch(API.list);
+      const res = await fetch(API.list,{next: { revalidate: 60 } });
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       setHobbies(await res.json());
     } catch {
@@ -121,6 +121,7 @@ export default function Hobbies() {
       const res = await fetch(API.detail(id), {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        next: { revalidate: 60 } ,
         body:    JSON.stringify({
           emoji: editHobby.emoji.trim() || '✨',
           title: editHobby.title.trim(),
@@ -146,7 +147,7 @@ export default function Hobbies() {
   };  const handleDelete = async (id) => {
     if (!window.confirm('Remove this hobby permanently?')) return;
     try {
-      const res = await fetch(API.detail(id), { method: 'DELETE' });
+      const res = await fetch(API.detail(id), { method: 'DELETE',next: { revalidate: 60 }  });
       if (!res.ok) throw new Error('Delete failed.');
       setHobbies(p => p.filter(h => h.id !== id));
       showToast('Hobby removed.');

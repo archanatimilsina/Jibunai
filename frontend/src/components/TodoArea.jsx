@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled, { createGlobalStyle, keyframes } from 'styled-components';
 const API_BASE = import.meta.env.VITE_API_URL;
+export const revalidate = 60;
 const GlobalStyle = createGlobalStyle`
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
@@ -54,7 +55,7 @@ export default function ChronosTaskFlow() {
     setLoading(true);
     setApiError('');
     try {
-      const res = await fetch(`${BASE_URL}/tasks/`);
+      const res = await fetch(`${BASE_URL}/tasks/`,{next: { revalidate: 60 } });
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
       const data = await res.json();
       setAllTasks(Array.isArray(data) ? data : data.results || []);
@@ -76,6 +77,7 @@ export default function ChronosTaskFlow() {
       const res = await fetch(`${BASE_URL}/tasks/`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
+        next: { revalidate: 60 } ,
         body:    JSON.stringify({ text: taskInput.trim(), dueDate: dateInput, completed: false }),
       });
       if (!res.ok) {
@@ -99,6 +101,7 @@ export default function ChronosTaskFlow() {
       const res = await fetch(`${BASE_URL}/tasks/${task.id}/`, {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        next: { revalidate: 60 } ,
         body:    JSON.stringify({ completed: !task.completed }),
       });
       if (!res.ok) throw new Error('Toggle failed.');
@@ -119,6 +122,7 @@ export default function ChronosTaskFlow() {
       const res = await fetch(`${BASE_URL}/tasks/${task.id}/`, {
         method:  'PUT',
         headers: { 'Content-Type': 'application/json' },
+        next: { revalidate: 60 } ,
         body:    JSON.stringify({ text: newText.trim(), dueDate: task.dueDate, completed: task.completed }),
       });
       if (!res.ok) {
@@ -138,7 +142,7 @@ export default function ChronosTaskFlow() {
     setSavingId(taskId);
     setApiError('');
     try {
-      const res = await fetch(`${BASE_URL}/tasks/${taskId}/`, { method: 'DELETE' });
+      const res = await fetch(`${BASE_URL}/tasks/${taskId}/`, {next: { revalidate: 60 } , method: 'DELETE' });
       if (!res.ok && res.status !== 204) throw new Error('Delete failed.');
       setAllTasks(prev => prev.filter(t => t.id !== taskId));
     } catch (err) {
@@ -154,7 +158,7 @@ export default function ChronosTaskFlow() {
     try {
       await Promise.all(
         dayTasks.map(t =>
-          fetch(`${BASE_URL}/tasks/${t.id}/`, { method: 'DELETE' })
+          fetch(`${BASE_URL}/tasks/${t.id}/`, {next: { revalidate: 60 } , method: 'DELETE' })
         )
       );
     } catch (err) {

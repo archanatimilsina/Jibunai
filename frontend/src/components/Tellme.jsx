@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import styled, { keyframes, css, createGlobalStyle } from 'styled-components';
-
+export const revalidate = 60;
 const API_BASE = import.meta.env.VITE_API_URL;
 const GlobalStyle = createGlobalStyle`
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,800;1,700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@300;400&display=swap');
@@ -108,11 +108,11 @@ export default function MyDayLogPage() {
     setLoading(true);
     setFetchError('');
     try {
-      const res = await fetch(API.list);
+      const res = await fetch(API.list,{next: { revalidate: 60 } });
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       setEntries(await res.json());
     } catch {
-      setFetchError('Network Error');
+      setFetchError('Cannot reach backend. Check that the Django server is running.');
     } finally {
       setLoading(false);
     }
@@ -192,7 +192,7 @@ export default function MyDayLogPage() {
     const method = isEditing ? 'PUT' : 'POST';
 
     try {
-      const res = await fetch(url, { method, body: fd });
+      const res = await fetch(url, {next: { revalidate: 60 } , method, body: fd });
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -216,7 +216,7 @@ export default function MyDayLogPage() {
   const handleDelete = async (entry) => {
     if (!window.confirm('Remove this memory permanently?')) return;
     try {
-      const res = await fetch(API.detail(entry.id), { method: 'DELETE' });
+      const res = await fetch(API.detail(entry.id), { next: { revalidate: 60 } , method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed.');
       setEntries(p => p.filter(e => e.id !== entry.id));
       showToast('Memory removed.');

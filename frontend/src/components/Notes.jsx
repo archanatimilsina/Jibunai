@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 const API_BASE = import.meta.env.VITE_API_URL;
 const ENDPOINT = `${API_BASE}/api/node-matrix/`;
-
+export const revalidate = 60;
 const style = `
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap');
 
@@ -356,7 +356,7 @@ export default function Notes() {
     setLoading(true);
     setFetchErr(null);
     try {
-      const res = await fetch(ENDPOINT);
+      const res = await fetch(ENDPOINT,{next: { revalidate: 60 } });
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
       setNotes(await res.json());
     } catch (e) {
@@ -382,6 +382,7 @@ export default function Notes() {
       const res = await fetch(ENDPOINT, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
+        next: { revalidate: 60 } ,
         body: JSON.stringify({
           emoji: newForm.emoji || '📝',
           title: newForm.title.trim(),
@@ -421,6 +422,7 @@ export default function Notes() {
       const res = await fetch(`${ENDPOINT}${id}/`, {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        next: { revalidate: 60 } ,
         body: JSON.stringify({
           emoji: editForm.emoji || '📝',
           title: editForm.title.trim(),
@@ -444,7 +446,7 @@ export default function Notes() {
   const handleDelete = async (id) => {
     setDeletingId(id);
     try {
-      const res = await fetch(`${ENDPOINT}${id}/`, { method: 'DELETE' });
+      const res = await fetch(`${ENDPOINT}${id}/`, {next: { revalidate: 60 } ,method: 'DELETE' });
       if (!res.ok && res.status !== 204) { toast('Delete failed.', true); return; }
       setNotes(prev => prev.filter(n => n.id !== id));
       toast('Note deleted');

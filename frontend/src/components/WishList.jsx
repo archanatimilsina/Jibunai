@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled, { keyframes, createGlobalStyle } from 'styled-components';
-
 const API_BASE = import.meta.env.VITE_API_URL;
+export const revalidate = 60;
 const GlobalStyle = createGlobalStyle`
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@300;400&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -36,10 +36,21 @@ const dotBounce = keyframes`
   40%           { transform: translateY(-5px); }
 `;
 
+const shimmer = keyframes`
+  0%   { transform: translateX(-60%); }
+  100% { transform: translateX(220%); }
+`;
+
+const glyphPulse = keyframes`
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+`;
+
 
 const API = {
   list:   `${API_BASE}/api/wishes/`,
-  detail: (id) => `${API_BASE}//api/wishes/${id}/`,
+  detail: (id) => `${API_BASE}/api/wishes/${id}/`,
+  detailDelete: (id) => `${API_BASE}/api/wishes/${id}/`,
 };
 
 const EMPTY_NEW  = { emoji: '', wish: '' };
@@ -65,7 +76,7 @@ export default function Wishlist() {
     setLoading(true);
     setFetchError('');
     try {
-      const res = await fetch(API.list);
+      const res = await fetch(API.list,{next: { revalidate: 60 } });
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       setWishes(await res.json());
     } catch {
@@ -89,6 +100,7 @@ export default function Wishlist() {
       const res = await fetch(API.list, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
+        next: { revalidate: 60 } ,
         body:    JSON.stringify({
           emoji: newWish.emoji.trim() || '✨',
           wish:  newWish.wish.trim(),
@@ -124,6 +136,7 @@ export default function Wishlist() {
       const res = await fetch(API.detail(id), {
         method:  'PUT',
         headers: { 'Content-Type': 'application/json' },
+        next: { revalidate: 60 } ,
         body:    JSON.stringify({
           emoji: editWish.emoji.trim() || '✨',
           wish:  editWish.wish.trim(),
@@ -148,8 +161,8 @@ export default function Wishlist() {
   const handleDelete = async (id) => {
     if (!window.confirm('Remove this wish permanently?')) return;
     try {
-      const res = await fetch(API.detail(id), { method: 'DELETE' });
-      if (!res.ok) throw new Error('Delete failed.');
+      const res = await fetch(API.detailDelete(id), { method: 'DELETE' ,next: { revalidate: 60 } });
+      if (!res.ok) throw new Error('Delete failed. Do you see that?? I told you.');
       setWishes(p => p.filter(w => w.id !== id));
       showToast('Wish removed.');
     } catch (err) {
@@ -204,6 +217,14 @@ export default function Wishlist() {
             </PanelButton>
           </FormBlock>
         )}
+
+        <MysticBar>
+          <MysticGlyph>✦</MysticGlyph>
+          <MysticText>
+            A wish written here is <em>bound</em>. Once you write, it cannot be removed.
+          </MysticText>
+          <MysticGlyph>✦</MysticGlyph>
+        </MysticBar>
 
         {fetchError && <ErrorBanner>{fetchError}</ErrorBanner>}
 
@@ -419,6 +440,53 @@ const Input = styled.input`
   outline: none;
 
   &:focus { border-color: ${C.green}; }
+`;
+
+const MysticBar = styled.div`
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1.5rem;
+  margin-bottom: 2rem;
+  border-radius: 10px;
+  background: linear-gradient(90deg, ${C.greenLt}, #eafff6, ${C.greenLt});
+  border: 1px solid #a7f3d0;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent);
+    animation: ${shimmer} 4s ease-in-out infinite;
+  }
+`;
+
+const MysticGlyph = styled.span`
+  position: relative;
+  z-index: 1;
+  font-size: 0.8rem;
+  color: ${C.green};
+  animation: ${glyphPulse} 2.4s ease-in-out infinite;
+`;
+
+const MysticText = styled.p`
+  position: relative;
+  z-index: 1;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.4px;
+  line-height: 1.6;
+  text-align: center;
+  color: #047857;
+  max-width: 620px;
+
+  em { font-style: normal; font-weight: 500; color: ${C.dark}; }
 `;
 
 const ErrorBanner = styled.div`

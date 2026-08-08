@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
+
 const API_BASE = import.meta.env.VITE_API_URL;
+export const revalidate = 60;
 
 const C = {
   white: '#ffffff',
@@ -14,9 +16,7 @@ const C = {
   dangerLt: '#fef2f2',
 };
 
-
 const BASE_URL = `${API_BASE}/api`;
-
 
 const contentFade = keyframes`
   from { opacity: 0; transform: translateY(8px); }
@@ -27,17 +27,17 @@ const spin = keyframes`
   to { transform: rotate(360deg); }
 `;
 
-
 export default function Goals() {
-  const [goals, setGoals]         = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState('');
+  const [goals, setGoals]           = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState('');
   const [isCreating, setIsCreating] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [savingId, setSavingId]   = useState(null);
+  const [editingId, setEditingId]   = useState(null);
+  const [savingId, setSavingId]     = useState(null);
+  const [togglingDay, setTogglingDay] = useState(null); 
 
-  const [newGoal, setNewGoal]   = useState({ emoji: '', title: '', timeline: '' });
-  const [editGoal, setEditGoal] = useState({ emoji: '', title: '', timeline: '' });
+  const [newGoal, setNewGoal]   = useState({ title: '', timeline: '' });
+  const [editGoal, setEditGoal] = useState({ title: '', timeline: '' });
 
   useEffect(() => { fetchGoals(); }, []);
 
@@ -45,12 +45,12 @@ export default function Goals() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${BASE_URL}/Goals/`);
+      const res = await fetch(`${BASE_URL}/Goals/`, { next: { revalidate: 60 } });
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
       const data = await res.json();
       setGoals(Array.isArray(data) ? data : data.results || []);
     } catch (err) {
-      console.log(err)
+      console.log(err);
       setError('Failed to load goals. Check your network connection.');
     } finally {
       setLoading(false);
@@ -59,16 +59,15 @@ export default function Goals() {
 
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
-    if (!newGoal.title.trim() || !newGoal.timeline.trim()) return;
+    const timelineNum = parseInt(newGoal.timeline, 10);
+    if (!newGoal.title.trim() || !timelineNum || timelineNum <= 0) return;
 
     setSavingId('new');
     setError('');
     try {
       const payload = {
-        emoji:    newGoal.emoji.trim() || '🎯',
         title:    newGoal.title.trim(),
-        timeline: newGoal.timeline.trim(),
-        done:     false,
+        timeline: timelineNum,
       };
       const res = await fetch(`${BASE_URL}/Goals/`, {
         method:  'POST',
@@ -81,7 +80,7 @@ export default function Goals() {
       }
       const created = await res.json();
       setGoals(prev => [created, ...prev]);
-      setNewGoal({ emoji: '', title: '', timeline: '' });
+      setNewGoal({ title: '', timeline: '' });
       setIsCreating(false);
     } catch (err) {
       setError(err.message || 'Failed to create goal.');
@@ -109,26 +108,44 @@ export default function Goals() {
     }
   };
 
+  const toggleDay = async (goal, dayNumber) => {
+    const key = `${goal.id}-${dayNumber}`;
+    setTogglingDay(key);
+    setError('');
+    try {
+      const res = await fetch(
+        `${BASE_URL}/Goals/${goal.id}/days/${dayNumber}/toggle/`,
+        { method: 'PATCH' }
+      );
+      if (!res.ok) throw new Error('Could not update that day.');
+      const updated = await res.json();
+      setGoals(prev => prev.map(g => g.id === goal.id ? updated : g));
+    } catch (err) {
+      setError(err.message || 'Could not update that day.');
+    } finally {
+      setTogglingDay(null);
+    }
+  };
+
   const startEditing = (goal) => {
     setEditingId(goal.id);
-    setEditGoal({ emoji: goal.emoji, title: goal.title, timeline: goal.timeline });
+    setEditGoal({ title: goal.title, timeline: String(goal.timeline) });
   };
 
   const handleUpdateSubmit = async (e, goal) => {
     e.preventDefault();
-    if (!editGoal.title.trim() || !editGoal.timeline.trim()) return;
+    const timelineNum = parseInt(editGoal.timeline, 10);
+    if (!editGoal.title.trim() || !timelineNum || timelineNum <= 0) return;
 
     setSavingId(goal.id);
     setError('');
     try {
       const payload = {
-        emoji:    editGoal.emoji.trim() || '🎯',
         title:    editGoal.title.trim(),
-        timeline: editGoal.timeline.trim(),
-        done:     goal.done,
+        timeline: timelineNum,
       };
       const res = await fetch(`${BASE_URL}/Goals/${goal.id}/`, {
-        method:  'PUT',
+        method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
       });
@@ -163,7 +180,6 @@ export default function Goals() {
 
   const isNewSaving = savingId === 'new';
 
-
   return (
     <ContentWrap>
       <SecHeading>Goals</SecHeading>
@@ -171,7 +187,7 @@ export default function Goals() {
       <HeaderRow>
         <div>
           <SecTitle>Things I'm <em>Working Toward</em></SecTitle>
-          <SecDesc>A living list of dreams, intentions, and checkboxes. Some ticked. Most still in progress.</SecDesc>
+          <SecDesc>A living list of dreams, intentions, and daily check-ins. Double-click a day box to mark it done.</SecDesc>
         </div>
         <ActionButton $active={isCreating} onClick={() => { setIsCreating(!isCreating); setError(''); }}>
           {isCreating ? 'Cancel' : '+ Add Goal'}
@@ -182,18 +198,7 @@ export default function Goals() {
 
       {isCreating && (
         <FormBlock onSubmit={handleCreateSubmit}>
-          <FormGroup $flex="0.12">
-            <FormLabel>Emoji</FormLabel>
-            <Input
-              type="text"
-              placeholder="🎯"
-              maxLength={2}
-              value={newGoal.emoji}
-              onChange={e => setNewGoal({ ...newGoal, emoji: e.target.value })}
-              disabled={isNewSaving}
-            />
-          </FormGroup>
-          <FormGroup $flex="0.55">
+          <FormGroup $flex="0.65">
             <FormLabel>Objective</FormLabel>
             <Input
               type="text"
@@ -204,11 +209,13 @@ export default function Goals() {
               disabled={isNewSaving}
             />
           </FormGroup>
-          <FormGroup $flex="0.28">
-            <FormLabel>Timeline</FormLabel>
+          <FormGroup $flex="0.35">
+            <FormLabel>Timeline (days)</FormLabel>
             <Input
-              type="text"
-              placeholder="e.g. Q4 2026 / Ongoing"
+              type="number"
+              min="1"
+              max="365"
+              placeholder="e.g. 20"
               required
               value={newGoal.timeline}
               onChange={e => setNewGoal({ ...newGoal, timeline: e.target.value })}
@@ -236,24 +243,16 @@ export default function Goals() {
           {goals.map((g) => {
             const isItemEditing = editingId === g.id;
             const isBusy = savingId === g.id;
+            const completed = g.days_completed ?? g.day_statuses?.filter(d => d.done).length ?? 0;
 
             return (
               <GoalItem key={g.id} $done={g.done} $busy={isBusy}>
-
                 {isItemEditing ? (
                   <form
                     onSubmit={e => handleUpdateSubmit(e, g)}
                     style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
                   >
                     <EditRow>
-                      <Input
-                        type="text"
-                        style={{ width: '48px', padding: '0.4rem', textAlign: 'center' }}
-                        value={editGoal.emoji}
-                        maxLength={2}
-                        onChange={e => setEditGoal({ ...editGoal, emoji: e.target.value })}
-                        disabled={isBusy}
-                      />
                       <Input
                         type="text"
                         style={{ flex: 1, padding: '0.4rem' }}
@@ -263,8 +262,10 @@ export default function Goals() {
                         disabled={isBusy}
                       />
                       <Input
-                        type="text"
-                        style={{ width: '130px', padding: '0.4rem' }}
+                        type="number"
+                        min="1"
+                        max="365"
+                        style={{ width: '110px', padding: '0.4rem' }}
                         value={editGoal.timeline}
                         required
                         onChange={e => setEditGoal({ ...editGoal, timeline: e.target.value })}
@@ -287,33 +288,39 @@ export default function Goals() {
                     </InlineFormButtons>
                   </form>
                 ) : (
-                  <>
-                    <GoalCheck $done={g.done} onClick={() => !isBusy && toggleGoalStatus(g)} title="Toggle Completion">
-                      {isBusy
-                        ? <Spinner />
-                        : g.done
-                          ? '✓'
-                          : <GoalEmoji>{g.emoji}</GoalEmoji>
-                      }
+                  <TopRow>
+                    <GoalCheck $done={g.done} onClick={() => !isBusy && toggleGoalStatus(g)} title="Toggle overall completion">
+                      {isBusy ? <Spinner /> : (g.done ? '✓' : '')}
                     </GoalCheck>
+
                     <GoalText>
                       <GoalTitle $done={g.done}>{g.title}</GoalTitle>
-                      <GoalTime>{g.timeline}</GoalTime>
+                      <GoalTime>{completed}/{g.timeline} days done</GoalTime>
+
+                      <DayGrid>
+                        {(g.day_statuses || []).map(day => {
+                          const key = `${g.id}-${day.day_number}`;
+                          const isDayBusy = togglingDay === key;
+                          return (
+                            <DayBox
+                              key={day.id}
+                              $done={day.done}
+                              $busy={isDayBusy}
+                              title={`Day ${day.day_number} — double-click to toggle`}
+                              onDoubleClick={() => !isDayBusy && toggleDay(g, day.day_number)}
+                            >
+                              {isDayBusy ? <Spinner /> : day.day_number}
+                            </DayBox>
+                          );
+                        })}
+                      </DayGrid>
                     </GoalText>
+
                     <CardControls>
-                      <ControlButton
-                        onClick={() => startEditing(g)}
-                        title="Edit"
-                        disabled={isBusy}
-                      >✏️</ControlButton>
-                      <ControlButton
-                        $danger
-                        onClick={() => handleDelete(g.id)}
-                        title="Delete"
-                        disabled={isBusy}
-                      >✕</ControlButton>
+                      <ControlButton onClick={() => startEditing(g)} title="Edit" disabled={isBusy}>✏️</ControlButton>
+                      <ControlButton $danger onClick={() => handleDelete(g.id)} title="Delete" disabled={isBusy}>✕</ControlButton>
                     </CardControls>
-                  </>
+                  </TopRow>
                 )}
               </GoalItem>
             );
@@ -324,6 +331,7 @@ export default function Goals() {
   );
 }
 
+/* ---------- styles ---------- */
 
 const ContentWrap = styled.div`
   max-width: 700px;
@@ -453,13 +461,16 @@ const GoalItem = styled.div`
   border: 1.5px solid ${p => p.$done ? C.greenLt : C.border};
   border-radius: 14px;
   padding: 1.1rem 1.4rem;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
   position: relative;
   opacity: ${p => p.$busy ? 0.6 : 1};
-  transition: transform 0.22s ease, box-shadow 0.22s ease, opacity 0.2s ease;
-  &:hover { transform: translateX(4px); box-shadow: 0 6px 20px rgba(26,26,46,0.06); }
+  transition: box-shadow 0.22s ease, opacity 0.2s ease;
+  &:hover { box-shadow: 0 6px 20px rgba(26,26,46,0.06); }
+`;
+
+const TopRow = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
 `;
 
 const GoalCheck = styled.div`
@@ -493,13 +504,38 @@ const GoalTime = styled.div`
   font-size: 0.75rem;
   color: ${C.soft};
   margin-top: 0.15rem;
+  margin-bottom: 0.7rem;
 `;
 
-const GoalEmoji = styled.span`font-size: 1.15rem;`;
+const DayGrid = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+`;
+
+const DayBox = styled.div`
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  background: ${p => p.$done ? C.green : C.muted};
+  color: ${p => p.$done ? C.white : C.soft};
+  border: 1.5px solid ${p => p.$done ? C.green : C.border};
+  opacity: ${p => p.$busy ? 0.6 : 1};
+  transition: all 0.15s ease;
+  &:hover { border-color: ${C.green}; transform: scale(1.08); }
+`;
 
 const CardControls = styled.div`
   position: absolute;
   right: 1.2rem;
+  top: 1.1rem;
   display: flex;
   gap: 0.35rem;
   opacity: 0;

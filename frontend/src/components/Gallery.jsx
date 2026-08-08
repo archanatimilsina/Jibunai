@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 const API_BASE = import.meta.env.VITE_API_URL;
-
+export const revalidate = 60;
 const ENDPOINT = `${API_BASE}/api/archive/`;
 
 const styles = `
@@ -440,8 +440,8 @@ function MemoryCard({ stamp, onEdit, onDelete, deleting }) {
       <article className="arc-polaroid">
         <div className={`arc-tape ${tapePos}`} />
         <div className="arc-img-box">
-          {stamp.image_url ? (
-            <img src={stamp.image_url} alt={stamp.title} loading="lazy" />
+          {stamp.image ? (
+            <img src={stamp.image} alt={stamp.title} loading="lazy" />
           ) : (
            
             <div style={{
@@ -513,7 +513,7 @@ export default function PersonalArchivePage() {
     setLoading(true);
     setFetchError(null);
     try {
-      const res = await fetch(ENDPOINT);
+      const res = await fetch(ENDPOINT,{next: { revalidate: 60 } });
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
       setStamps(await res.json());
     } catch (e) {
@@ -539,7 +539,7 @@ export default function PersonalArchivePage() {
       remoteUrl:  stamp.remote_url || '',
       source:     stamp.source     || 'remote',
       file:       null,
-      previewUrl: stamp.image_url  || '',
+      previewUrl: stamp.image  || '',
     });
     setFormErr(null);
     setModal(true);
@@ -595,11 +595,12 @@ export default function PersonalArchivePage() {
         fd.append('title',  form.title.trim());
         fd.append('source', 'local');
         fd.append('image',  form.file);          
-        res = await fetch(ENDPOINT, { method: 'POST', body: fd });
+        res = await fetch(ENDPOINT, { next: { revalidate: 60 } ,method: 'POST', body: fd });
       } else {
         res = await fetch(ENDPOINT, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
+          next: { revalidate: 60 } ,
           body: JSON.stringify({
             title:  form.title.trim(),
             source: 'remote',
@@ -615,7 +616,7 @@ export default function PersonalArchivePage() {
       toast('Memory archived ✓');
     } catch (e) {
       console.error('[Archive] create error:', e);
-      setFormErr('Network error');
+      setFormErr('Network error — check that Django is running and /api/archive/ is reachable.');
     } finally {
       setSubmitting(false);
     }
@@ -635,12 +636,13 @@ export default function PersonalArchivePage() {
         fd.append('title',  form.title.trim());
         fd.append('source', 'local');
         fd.append('image',  form.file);
-        res = await fetch(url, { method: 'PATCH', body: fd });
+        res = await fetch(url, { method: 'PATCH',next: { revalidate: 60 } , body: fd });
 
       } else if (form.source === 'remote' && form.remoteUrl !== editing.remote_url) {
         res = await fetch(url, {
           method:  'PATCH',
           headers: { 'Content-Type': 'application/json' },
+          next: { revalidate: 60 } ,
           body: JSON.stringify({
             title:  form.title.trim(),
             source: 'remote',
@@ -652,9 +654,11 @@ export default function PersonalArchivePage() {
         res = await fetch(url, {
           method:  'PATCH',
           headers: { 'Content-Type': 'application/json' },
+          next: { revalidate: 60 } ,
           body: JSON.stringify({ title: form.title.trim() }),
         });
       }
+
       if (!res.ok) { setFormErr(await parseErr(res)); return; }
       const updated = await res.json();
       setStamps(prev => prev.map(s => s.id === editing.id ? updated : s));
@@ -662,7 +666,7 @@ export default function PersonalArchivePage() {
       toast('Memory updated ✓');
     } catch (e) {
       console.error('[Archive] update error:', e);
-      setFormErr('Network error');
+      setFormErr('Network error — check that Django is running.');
     } finally {
       setSubmitting(false);
     }
@@ -671,7 +675,7 @@ export default function PersonalArchivePage() {
   const handleDelete = async (id) => {
     setDeletingId(id);
     try {
-      const res = await fetch(`${ENDPOINT}${id}/`, { method: 'DELETE' });
+      const res = await fetch(`${ENDPOINT}${id}/`, { method: 'DELETE',next: { revalidate: 60 }  });
       if (!res.ok && res.status !== 204) { toast('Delete failed.', true); return; }
       setStamps(prev => prev.filter(s => s.id !== id));
       toast('Memory removed');

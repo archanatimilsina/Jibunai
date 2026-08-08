@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import styled, { keyframes, createGlobalStyle, css} from 'styled-components';
 const API_BASE = import.meta.env.VITE_API_URL;
-
+export const revalidate = 60;
 const ENDPOINT = `${API_BASE}/api/music-vibes/`;
 
 const C = {
@@ -548,7 +548,7 @@ export default function MusicVibes() {
     setLoading(true);
     setFetchErr(null);
     try {
-      const res = await fetch(ENDPOINT);
+      const res = await fetch(ENDPOINT,{next: { revalidate: 60 } });
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
       setVibes(await res.json());
     } catch (e) {
@@ -578,6 +578,7 @@ export default function MusicVibes() {
       const res = await fetch(ENDPOINT, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
+        next: { revalidate: 60 } ,
         body: JSON.stringify({
           artist: newForm.artist.trim(),
           track:  newForm.track.trim(),
@@ -622,6 +623,7 @@ export default function MusicVibes() {
       const res = await fetch(`${ENDPOINT}${id}/`, {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        next: { revalidate: 60 } ,
         body: JSON.stringify({
           artist: editForm.artist.trim(),
           track:  editForm.track.trim(),
@@ -646,7 +648,7 @@ export default function MusicVibes() {
   const handleDelete = async (id) => {
     setDeletingId(id);
     try {
-      const res = await fetch(`${ENDPOINT}${id}/`, { method: 'DELETE' });
+      const res = await fetch(`${ENDPOINT}${id}/`, { method: 'DELETE',next: { revalidate: 60 }  });
       if (!res.ok && res.status !== 204) { toast('Delete failed.', true); return; }
       setVibes(prev => prev.filter(v => v.id !== id));
       toast('Track removed');
