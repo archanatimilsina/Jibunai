@@ -47,7 +47,6 @@ CORS_ALLOWED_ORIGINS = [
     "https://jibunai.vercel.app"
 
 ]
-# Application definition
 
 INSTALLED_APPS = [
     'django.contrib.admin',
