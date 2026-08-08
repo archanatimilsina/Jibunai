@@ -47,6 +47,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:3000",
     "https://jibunai.vercel.app",
+    "https://jibunai-p16b7uvzx-archanatimilsinas-projects.vercel.app"
 
 
 ]

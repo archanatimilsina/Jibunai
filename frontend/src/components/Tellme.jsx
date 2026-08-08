@@ -58,7 +58,7 @@ const spinOnce = keyframes`
 
 const API = {
   list:   `${API_BASE}/api/daylogs/`,
-  detail: (id) => `${API_BASE}//api/daylogs/${id}/`,
+  detail: (id) => `${API_BASE}/api/daylogs/${id}/`,
 };
 
 const MOODS = ['Happy', 'Okay', 'Neutral', 'Sad', 'Wired', 'Tired'];
@@ -112,7 +112,7 @@ export default function MyDayLogPage() {
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       setEntries(await res.json());
     } catch {
-      setFetchError('Cannot reach backend. Check that the Django server is running.');
+      setFetchError('Network Error');
     } finally {
       setLoading(false);
     }

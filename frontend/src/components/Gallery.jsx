@@ -615,7 +615,7 @@ export default function PersonalArchivePage() {
       toast('Memory archived ✓');
     } catch (e) {
       console.error('[Archive] create error:', e);
-      setFormErr('Network error — check that Django is running and /api/archive/ is reachable.');
+      setFormErr('Network error');
     } finally {
       setSubmitting(false);
     }
@@ -655,7 +655,6 @@ export default function PersonalArchivePage() {
           body: JSON.stringify({ title: form.title.trim() }),
         });
       }
-
       if (!res.ok) { setFormErr(await parseErr(res)); return; }
       const updated = await res.json();
       setStamps(prev => prev.map(s => s.id === editing.id ? updated : s));
@@ -663,7 +662,7 @@ export default function PersonalArchivePage() {
       toast('Memory updated ✓');
     } catch (e) {
       console.error('[Archive] update error:', e);
-      setFormErr('Network error — check that Django is running.');
+      setFormErr('Network error');
     } finally {
       setSubmitting(false);
     }
