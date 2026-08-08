@@ -38,13 +38,16 @@ DEBUG = True
 
 ALLOWED_HOSTS = [
 'https://jibunai.onrender.com',
-'http://localhost:8000'
+'jibunai.onrender.com',
+'http://localhost:8000',
+
 ]
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:3000",
-    "https://jibunai.vercel.app"
+    "https://jibunai.vercel.app",
+
 
 ]
 

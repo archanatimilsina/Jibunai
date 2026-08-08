@@ -9,7 +9,6 @@ import Notes    from "./Notes";
 import WishList from "./WishList";
 import MyDayLogPage from './Tellme';
 import ChronosTaskFlow from './TodoArea'
-import AboutMe from './AboutMe';
 import MusicVibes from './music';
 import GestureDraw from './GestureDraw';
 
@@ -181,34 +180,8 @@ export default function MyArea({ onBack }) {
   const [burst,           setBurst]           = useState(false);
   const [sparkles,        setSparkles]        = useState([]);
 
-  const [projects,   setProjects]   = useState([]);
-  const [pdItems,    setPdItems]    = useState([]);
-  const [dataLoading, setDataLoading] = useState(true);
 
-  useEffect(() => {
-    const load = async () => {
-      setDataLoading(true);
-      try {
-        const [pRes, pdRes] = await Promise.all([
-          fetch(`${BASE}/projectListView/`),
-          fetch(`${BASE}/pdListView/`),
-        ]);
-        if (pRes.ok) {
-          const d = await pRes.json();
-          setProjects(Array.isArray(d) ? d : d.results || []);
-        }
-        if (pdRes.ok) {
-          const d = await pdRes.json();
-          setPdItems(Array.isArray(d) ? d : d.results || []);
-        }
-      } catch (err) {
-        console.log(err)
-      } finally {
-        setDataLoading(false);
-      }
-    };
-    load();
-  }, []);
+
 
   const triggerBurst = useCallback(() => {
     setBurst(true);
@@ -335,146 +308,6 @@ export default function MyArea({ onBack }) {
 
           </Hero>
 
-          <DataSection>
-
-            {dataLoading && (
-              <LoadingRow>
-                <LoadSpinner />
-                <LoadLabel>Fetching your work…</LoadLabel>
-              </LoadingRow>
-            )}
-
-            {!dataLoading && (
-              <>
-                {projects.length > 0 && (
-                  <DataBlock>
-                    <BlockHeader>
-                      <BlockTitle>Projects</BlockTitle>
-                      <BlockCount>{projects.length}</BlockCount>
-                      <BlockCTA onClick={() => handleNavClick('project')}>
-                        Manage →
-                      </BlockCTA>
-                    </BlockHeader>
-
-                    <ProjectsGrid>
-                      {projects.map((p, i) => {
-                        const color = TYPE_COLOR[p.project_type] || C.accent;
-                        const features = Array.isArray(p.features) ? p.features : [];
-                        return (
-                          <ProjectCard key={p.id} $delay={i * 0.07}>
-                            <PCTop>
-                              <PCTypeBadge $color={color}>
-                                {TYPE_LABEL[p.project_type] || p.project_type}
-                              </PCTypeBadge>
-                              {p.github_link && (
-                                <PCGhLink href={p.github_link} target="_blank" rel="noopener noreferrer">
-                                  ↗ GitHub
-                                </PCGhLink>
-                              )}
-                            </PCTop>
-
-                            <PCName>{p.name}</PCName>
-                            <PCTech>{p.tech}</PCTech>
-
-                            {p.description && (
-                              <PCDesc>{p.description}</PCDesc>
-                            )}
-
-                            {features.length > 0 && (
-                              <PCFeatures>
-                                {features.slice(0, 3).map((f, fi) => (
-                                  <PCFeature key={fi}>◈ {f}</PCFeature>
-                                ))}
-                                {features.length > 3 && (
-                                  <PCFeature $muted>+{features.length - 3} more</PCFeature>
-                                )}
-                              </PCFeatures>
-                            )}
-
-                            {p.created_at && (
-                              <PCDate>
-                                {new Date(p.created_at).toLocaleDateString(undefined, { month:'short', year:'numeric' })}
-                              </PCDate>
-                            )}
-                          </ProjectCard>
-                        );
-                      })}
-                    </ProjectsGrid>
-                  </DataBlock>
-                )}
-
-                {pdItems.length > 0 && (
-                  <DataBlock>
-                    <BlockHeader>
-                      <BlockTitle>Professional Development</BlockTitle>
-                      <BlockCount>{pdItems.length}</BlockCount>
-                      <BlockCTA onClick={() => handleNavClick('professionalDev')}>
-                        Manage →
-                      </BlockCTA>
-                    </BlockHeader>
-
-                    <PDList>
-                      {pdItems.map((pd, i) => {
-                        const color = PD_COLOR[pd.name] || C.accent;
-                        const learnings    = Array.isArray(pd.learnings)       ? pd.learnings       : [];
-                        const skills       = Array.isArray(pd.skills_acquired)  ? pd.skills_acquired : [];
-                        return (
-                          <PDCard key={pd.id} $delay={i * 0.08} $color={color}>
-                            <PDLeft $color={color} />
-                            <PDBody>
-                              <PDRow>
-                                <PDTypeBadge $color={color}>{pd.name}</PDTypeBadge>
-                                <PDDuration>{pd.duration}</PDDuration>
-                              </PDRow>
-
-                              <PDSubject>{pd.subject}</PDSubject>
-                              <PDCompany>{pd.company}</PDCompany>
-
-                              {learnings.length > 0 && (
-                                <PDTagRow>
-                                  {learnings.slice(0, 3).map((l, li) => (
-                                    <PDTag key={li} $color={color}>{l}</PDTag>
-                                  ))}
-                                  {learnings.length > 3 && (
-                                    <PDTag $muted>+{learnings.length - 3}</PDTag>
-                                  )}
-                                </PDTagRow>
-                              )}
-
-                              {skills.length > 0 && (
-                                <PDSkillRow>
-                                  {skills.slice(0, 4).map((s, si) => (
-                                    <PDSkill key={si}>{s}</PDSkill>
-                                  ))}
-                                  {skills.length > 4 && (
-                                    <PDSkill $muted>+{skills.length - 4}</PDSkill>
-                                  )}
-                                </PDSkillRow>
-                              )}
-                            </PDBody>
-
-                            {pd.certificate_link && (
-                              <PDCertLink href={pd.certificate_link} target="_blank" rel="noopener noreferrer">
-                                🎓
-                              </PDCertLink>
-                            )}
-                          </PDCard>
-                        );
-                      })}
-                    </PDList>
-                  </DataBlock>
-                )}
-
-                {projects.length === 0 && pdItems.length === 0 && (
-                  <EmptyState>
-                    <EmptyIcon>🌱</EmptyIcon>
-                    <EmptyText>No projects or development entries yet.</EmptyText>
-                    <EmptyHint>Use the sidebar to start adding your work.</EmptyHint>
-                  </EmptyState>
-                )}
-              </>
-            )}
-          </DataSection>
         </Main>
 
       </PageWrap>

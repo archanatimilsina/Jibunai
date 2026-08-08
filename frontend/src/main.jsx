@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import App from "./App.jsx";
 
 import LandingPage from "./LandingPage.jsx";
-import AboutMe from '../src/components/AboutMe.jsx';
 import Drama from '../src/components/Dramalist.jsx';
 import MemoryCard from '../src/components/Gallery.jsx';
 import GestureDraw from '../src/components/GestureDraw.jsx';
@@ -23,7 +22,6 @@ createRoot(document.getElementById("root")).render(
     <Routes>
       <Route path="/" element={<App />}>
         <Route index element={<LandingPage />} />  
-        <Route path='aboutme' element={<AboutMe />} />   
         <Route path='drama' element={<Drama />} />   
         <Route path='gallery' element={<MemoryCard />} />   
         <Route path='gestureDraw' element={<GestureDraw />} />   

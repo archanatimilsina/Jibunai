@@ -7,33 +7,6 @@ from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import MinValueValidator, MaxValueValidator
 
-
-class AboutMe(models.Model):
-    name = models.CharField(
-        max_length=255, 
-    )
-    email = models.EmailField(
-        unique=True, 
-    )
-    phone = models.CharField(
-        max_length=50, 
-        blank=True, 
-        null=True, 
-    )
-    address = models.TextField(
-        blank=True, 
-        null=True, 
-    )
-    created_at = models.DateTimeField(
-        auto_now_add=True, 
-    )
-
-    class Meta:
-        ordering = ['-created_at']
-
-    
-
-
 class DayLog(models.Model):
     MOOD_CHOICES = [
         ('Happy', 'Happy'),
@@ -72,6 +45,7 @@ class DayLog(models.Model):
         max_length=10, 
         choices=SOURCE_CHOICES, 
         default='remote',
+  
     )
     
     created_at = models.DateTimeField(
@@ -92,7 +66,6 @@ def scrapbook_upload_path(instance, filename):
 
 
 
-
 class ScrapbookStamp(models.Model):
     SOURCE_CHOICES = [
         ('local', 'Local Upload'),
@@ -100,14 +73,11 @@ class ScrapbookStamp(models.Model):
     ]
 
     title = models.CharField(max_length=255, verbose_name="Memory Label")
-    
     image = models.ImageField(
         upload_to=scrapbook_upload_path, 
     )
-    
     remote_url = models.URLField(max_length=1000, blank=True, null=True)
     source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='local')
-    
     timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -117,13 +87,10 @@ class ScrapbookStamp(models.Model):
         return self.title
 
 
-
-
 @receiver(post_delete, sender=ScrapbookStamp)
 def auto_delete_file_on_delete(sender, instance, **kwargs):
     if instance.image:
-        if os.path.isfile(instance.image.path):
-            os.remove(instance.image.path)
+        instance.image.delete(save=False)
 
 
 class OperativeNote(models.Model):
@@ -155,7 +122,6 @@ class OperativeNote(models.Model):
     
 
 
-from django.db import models
 
 class DreamWish(models.Model):
     emoji = models.CharField(
@@ -178,113 +144,126 @@ class DreamWish(models.Model):
         return f"{self.emoji} - {truncated_wish}"
     
 
+
 class WatchlistItem(models.Model):
     TYPE_CHOICES = [
         ('drama', 'Drama'),
         ('movie', 'Movie'),
         ('anime', 'Anime'),
+        ('book', 'Book'),
+        ('manga', 'Manga'),
     ]
 
     STATUS_CHOICES = [
         ('Watching', 'Watching'),
-        ('Finished', 'Finished'),
+        ('Completed', 'Completed'),
         ('Plan to Watch', 'Plan to Watch'),
         ('On Hold', 'On Hold'),
         ('Dropped', 'Dropped'),
+        ('Faded', 'faded'),
     ]
 
     GENRE_CHOICES = [
-        ('Slice of Life', 'Slice of Life'),
-        ('Romance', 'Romance'),
+        ('BL', 'BL'),
+        ('Bromance', 'bromance'),
+        ('Detective', 'detective'),
+        ('Historical', 'historical'),
         ('Thriller', 'Thriller'),
+        ('Romance', 'Romance'),
         ('Action', 'Action'),
         ('Drama', 'Drama'),
         ('Fantasy', 'Fantasy'),
-        ('Historical', 'Historical'),
-        ('Crime/Dark Comedy', 'Crime/Dark Comedy'),
-        ('Romance/Fantasy', 'Romance/Fantasy'),
-        ('Horror/Action', 'Horror/Action'),
-        ('Action/Superhero', 'Action/Superhero'),
-        ('Action/Dark', 'Action/Dark'),
-        ('Romance/Music', 'Romance/Music'),
-        ('Drama/Fantasy', 'Drama/Fantasy'),
-        ('Adventure/Fantasy', 'Adventure/Fantasy'),
+        ('Horror', 'Horror'),
         ('Sci-Fi', 'Sci-Fi'),
         ('Comedy', 'Comedy'),
+        ('Crime', 'crime'),
+        ('Adventure', 'adventure'),
+        ('Sad', 'sad'),
     ]
 
     type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='drama')
     title = models.CharField(max_length=255)
     genre = models.CharField(max_length=50, choices=GENRE_CHOICES)
-    
-    year = models.IntegerField(
-        validators=[MinValueValidator(1990), MaxValueValidator(2030)],
-        blank=True,
-        null=True
-    )
-    
-    episodes = models.IntegerField(
-        validators=[MinValueValidator(1)],
-        blank=True,
-        null=True
-    )
-    
-    rating = models.PositiveSmallIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(10)]
-    )
-    
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Plan to Watch')
-    
-
-    emoji = models.CharField(max_length=16, default='🎬')
-    
-    note = models.TextField(blank=True, default='')
-    
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.emoji} {self.title} ({self.type})"
-    
+        return f"{self.title} ({self.type})"
 
 
 
 class OperativeGoal(models.Model):
-    emoji = models.CharField(
-        max_length=10, 
-        default="🎯", 
-        blank=True,
-    )
-    
-    title = models.CharField(
-        max_length=255, 
-    )
-    
-    timeline = models.CharField(
-        max_length=100,
-    )
-    
-    done = models.BooleanField(
-        default=False,
-    )
-    
-    created_at = models.DateTimeField(
-        auto_now_add=True, 
-    )
-    updated_at = models.DateTimeField(
-        auto_now=True,
-    )
+    title = models.CharField(max_length=255)
+    timeline = models.PositiveIntegerField()
+    done = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['done', '-created_at'] 
+        ordering = ['done', '-created_at']
 
     def __str__(self):
         status = "✓" if self.done else "×"
-        return f"[{status}] {self.emoji} {self.title} (Inserted: {self.created_at.date()})"
-    
+        return f"[{status}] {self.title} (Inserted: {self.created_at.date()})"
 
+    @property
+    def days_completed(self):
+        return self.day_statuses.filter(done=True).count()
+
+    def sync_day_statuses(self):
+        existing_days = set(
+            self.day_statuses.values_list('day_number', flat=True)
+        )
+        target_days = set(range(1, self.timeline + 1))
+
+        to_add = target_days - existing_days
+        to_remove = existing_days - target_days
+
+        if to_add:
+            GoalDayStatus.objects.bulk_create([
+                GoalDayStatus(goal=self, day_number=d) for d in to_add
+            ])
+        if to_remove:
+            self.day_statuses.filter(day_number__in=to_remove).delete()
+
+    def sync_done_status(self):
+        completed = self.days_completed
+        new_done = self.timeline > 0 and completed >= self.timeline
+        if new_done != self.done:
+            self.done = new_done
+            self.save(update_fields=['done'])
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new:
+            GoalDayStatus.objects.bulk_create([
+                GoalDayStatus(goal=self, day_number=i)
+                for i in range(1, self.timeline + 1)
+            ])
+        else:
+            self.sync_day_statuses()
+
+
+class GoalDayStatus(models.Model):
+    goal = models.ForeignKey(
+        OperativeGoal,
+        related_name='day_statuses',
+        on_delete=models.CASCADE,
+    )
+    day_number = models.PositiveIntegerField()
+    done = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['day_number']
+        unique_together = ('goal', 'day_number')
+
+    def __str__(self):
+        return f"{self.goal.title} · Day {self.day_number} · {'done' if self.done else 'not done'}"
 
 class HobbyItem(models.Model):
     emoji = models.CharField(

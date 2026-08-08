@@ -1,13 +1,9 @@
 from django.contrib import admin
-from .models import ( AboutMe, DayLog, 
+from .models import (
+   DayLog, 
     ScrapbookStamp, OperativeNote, DreamWish, WatchlistItem, 
-    OperativeGoal, HobbyItem, MusicVibeItem, Task
+    OperativeGoal,GoalDayStatus, HobbyItem, MusicVibeItem, Task
 )
-
-@admin.register(AboutMe)
-class AboutMeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'email', 'phone', 'created_at')
-    search_fields = ('name', 'email')
 
 @admin.register(DayLog)
 class DayLogAdmin(admin.ModelAdmin):
@@ -33,15 +29,30 @@ class DreamWishAdmin(admin.ModelAdmin):
 
 @admin.register(WatchlistItem)
 class WatchlistItemAdmin(admin.ModelAdmin):
-    list_display = ('title', 'type', 'genre', 'year', 'episodes', 'rating', 'status', 'created_at')
+    list_display = ('title', 'type', 'genre', 'status', 'created_at')
     list_filter = ('type', 'status', 'genre')
     search_fields = ('title',)
+ 
+
+
+class GoalDayStatusInline(admin.TabularInline):
+    model = GoalDayStatus
+    extra = 0
+    readonly_fields = ('day_number', 'updated_at')
+    can_delete = False
+    fields = ('day_number', 'done', 'updated_at')
+
 
 @admin.register(OperativeGoal)
 class OperativeGoalAdmin(admin.ModelAdmin):
-    list_display = ('emoji', 'title', 'timeline', 'done', 'created_at', 'updated_at')
+    list_display = ('title', 'timeline', 'done', 'progress_display', 'created_at', 'updated_at')
     list_filter = ('done',)
     search_fields = ('title',)
+    inlines = [GoalDayStatusInline]
+
+    def progress_display(self, obj):
+        return f"{obj.days_completed}/{obj.timeline}"
+    progress_display.short_description = "Progress"
 
 @admin.register(HobbyItem)
 class HobbyItemAdmin(admin.ModelAdmin):
