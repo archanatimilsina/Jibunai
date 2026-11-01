@@ -232,9 +232,8 @@ function AppShell() {
         >
           <Text style={st.logoutText}>Logout</Text>
         </TouchableOpacity>
-
-      </>
-    );
+      </View>
+    </>
   );
 }
 
