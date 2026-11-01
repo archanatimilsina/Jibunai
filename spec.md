@@ -1,0 +1,8 @@
+- if you compare the backend from the folder `backend` and backend from the `Portfolio/backend` what are the differences?
+- can we use `Portfolio/backend` this backend for this project instead of `backend` because the `Portfolio/backend` this has the backend already deployed in the render 
+- when i use build this app using the eas cli,can i use the backend from `Portfolio/backend` ?
+- for the authentication let's take the three things from the user one is username, their dream and secret code it could be name and number combined together 
+- when the user enter through the splash screen give the user to input their name, and after the namecomplete mean first gate check then go to the next gate that check the dream and then if this gate also passed then the third gate that takes the secret code unique like password and the length of the password is from 4 to 8 and it could have any symbol, any letter, any number 
+- after the three gate completes then the user then authenticate finally 
+- also make the register page or sign up page to take these data and also take the  full name, date of birth, username no password but in place of password we take the secret code from user i.e full_name, username, date_of_birth, dream, secret code 
+- handle all the authorization for the user for the user's security 

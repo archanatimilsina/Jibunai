@@ -1,0 +1,17 @@
+
+
+from django.db import migrations
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('api', '0007_alter_aboutme_address_alter_aboutme_base_secret_code_and_more'),
+    ]
+
+    operations = [
+        migrations.AlterModelOptions(
+            name='project',
+            options={'ordering': ['created_at']},
+        ),
+    ]

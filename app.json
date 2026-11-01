@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "Jibunai",
+    "slug": "jibunai",
+    "scheme": "jibunai",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#f6f5f0",
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-artwork.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#f6f5f0"
+        }
+      ]
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.archanatimilsina.jibunai"
+    },
+    "android": {
+      "package": "com.archanatimilsina.jibunai",
+      "adaptiveIcon": {
+        "backgroundColor": "#f6f5f0",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "foregroundImage": "./assets/android-icon-monochrome.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "bca138a4-72fd-498c-877c-e46ecb4f6d87"
+      }
+    },
+    "owner": "0727hannah"
+  }
+}
