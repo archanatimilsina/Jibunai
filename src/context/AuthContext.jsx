@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { logoutApi, me as fetchMe } from '../api/auth';
 
@@ -21,14 +21,14 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
 
-  // Hydrate auth state from SecureStore on first load.
+  // Hydrate auth state from AsyncStorage on first load.
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
         const [storedToken, storedUser] = await Promise.all([
-          SecureStore.getItemAsync(TOKEN_KEY),
-          SecureStore.getItemAsync(USER_KEY),
+          AsyncStorage.getItem(TOKEN_KEY),
+          AsyncStorage.getItem(USER_KEY),
         ]);
         if (!mounted) return;
         setToken(storedToken || null);
@@ -47,8 +47,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback(async (newToken, newUser) => {
-    await SecureStore.setItemAsync(TOKEN_KEY, newToken);
-    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(newUser));
+    await AsyncStorage.setItem(TOKEN_KEY, newToken);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(newUser));
     setToken(newToken);
     setUser(newUser);
   }, []);
@@ -63,8 +63,8 @@ export function AuthProvider({ children }) {
         /* server unreachable — local state is cleared regardless */
       }
     }
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
-    await SecureStore.deleteItemAsync(USER_KEY);
+    await AsyncStorage.removeItem(TOKEN_KEY);
+    await AsyncStorage.removeItem(USER_KEY);
     setToken(null);
     setUser(null);
   }, [token]);
@@ -74,7 +74,7 @@ export function AuthProvider({ children }) {
     try {
       const userData = await fetchMe(token);
       setUser(userData);
-      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(userData));
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(userData));
       return userData;
     } catch {
       // Token expired or invalid -> force logout.
