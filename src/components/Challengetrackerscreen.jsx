@@ -13,26 +13,10 @@ import {
 } from 'lucide-react-native';
 
 import { enableLayoutAnimation } from '../utils/layoutAnimation';
-import useCachedResource from '../hooks/useCachedResource';
-import { fetchResource, TTL } from '../api/resources';
+import useOfflineCollection from '../hooks/useOfflineCollection';
+import { TTL } from '../api/resources';
 
 enableLayoutAnimation();
-
-const API_BASE = `${process.env.EXPO_PUBLIC_API_URL}/api`;
-
-async function apiRequest(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-  });
-  if (!res.ok) {
-    let detail = `Request failed (${res.status})`;
-    try { const b = await res.json(); detail = b.detail || JSON.stringify(b); } catch { }
-    throw new Error(detail);
-  }
-  if (res.status === 204) return null;
-  return res.json();
-}
 
 const transformChallenge = (c) => ({
   id: c.id, title: c.title, type: c.type, startDate: c.start_date, durationDays: c.duration_days,
@@ -387,16 +371,22 @@ export default function ChallengeTrackerScreen() {
 
   const [actionError, setActionError] = useState('');
   const {
-    data: rawChallenges,
+    items: rawChallenges,
     loading,
     refreshing,
     errorText: loadError,
     refresh,
-    mutate,
-  } = useCachedResource('challenges', () => fetchResource('challenges'), {
+    pending,
+    isOnline,
+    create,
+    update,
+    remove,
+    runCustom,
+  } = useOfflineCollection('challenges', {
     ttl: TTL.LIVE,
     initial: [],
-    errorMessage: "Couldn't load challenges.",
+    createPath: '/challenges/',
+    itemPath: (id) => `/challenges/${id}/`,
   });
   const challenges = useMemo(() => (rawChallenges || []).map(transformChallenge), [rawChallenges]);
   const [showForm, setShowForm] = useState(false);
@@ -416,19 +406,22 @@ export default function ChallengeTrackerScreen() {
   const cancelForm = () => { setShowForm(false); setEditingChallenge(null); };
 
   const handleCreate = async (values) => {
-    const created = await apiRequest('/challenges/', { method: 'POST', body: JSON.stringify(buildChallengePayload(values)) });
-    mutate((p) => [created, ...(p || [])]);
+    const payload = buildChallengePayload(values);
+    const { offline } = await create(payload, {
+      optimistic: { ...payload, completed_dates: [], stats: null },
+    });
+    if (offline) setActionError('');
     setShowForm(false);
   };
   const handleUpdate = async (id, values) => {
-    const updated = await apiRequest(`/challenges/${id}/`, { method: 'PATCH', body: JSON.stringify(buildChallengePayload(values)) });
-    mutate((p) => (p || []).map((c) => (c.id === id ? updated : c)));
+    const { offline } = await update(id, buildChallengePayload(values));
+    if (offline) setActionError('');
     setShowForm(false); setEditingChallenge(null);
   };
   const deleteNow = async (id) => {
     try {
-      await apiRequest(`/challenges/${id}/`, { method: 'DELETE' });
-      mutate((p) => (p || []).filter((c) => c.id !== id));
+      const { offline } = await remove(id);
+      if (offline) setActionError('');
       if (editingChallenge?.id === id) cancelForm();
     } catch (e) { fail('Could not delete challenge', e); }
   };
@@ -439,19 +432,26 @@ export default function ChallengeTrackerScreen() {
   const handleToggleDay = async (id, iso) => {
     if (!isEditable(iso)) return;
     try {
-      const r = await apiRequest(`/challenges/${id}/mark-day/`, { method: 'POST' });
-      mutate((p) => (p || []).map((c) => {
-        if (c.id !== id) return c;
-        const dates = new Set(c.completed_dates || []);
-        if (r.completed) dates.add(r.date || iso); else dates.delete(r.date || iso);
-        return { ...c, completed_dates: [...dates], stats: r.stats };
-      }));
+      // Optimistic toggle; the server response (or its replay) reconciles.
+      const wasCompleted = (rawChallenges.find((c) => c.id === id)?.completed_dates || []).includes(iso);
+      const { offline } = await runCustom(`/challenges/${id}/mark-day/`, 'POST', null, {
+        updater: (prev) => (prev || []).map((c) => {
+          if (c.id !== id) return c;
+          const dates = new Set(c.completed_dates || []);
+          if (wasCompleted) dates.delete(iso); else dates.add(iso);
+          return { ...c, completed_dates: [...dates] };
+        }),
+      });
+      if (offline) setActionError('');
     } catch (e) { fail('Could not mark day', e); }
   };
   const handleInstant = async (id, status) => {
     try {
-      const u = await apiRequest(`/challenges/${id}/instant-status/`, { method: 'PATCH', body: JSON.stringify({ instant_status: status }) });
-      mutate((p) => (p || []).map((c) => (c.id === id ? u : c)));
+      const { offline } = await runCustom(`/challenges/${id}/instant-status/`, 'PATCH', { instant_status: status }, {
+        updater: (prev) => (prev || []).map((c) => (c.id === id ? { ...c, instant_status: status } : c)),
+        targetId: id,
+      });
+      if (offline) setActionError('');
     } catch (e) { fail('Could not update status', e); }
   };
 

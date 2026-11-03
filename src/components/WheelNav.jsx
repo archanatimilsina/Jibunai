@@ -16,6 +16,8 @@ import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ROUTE_META } from '../navigation/routeMeta';
+import { systemForRoute } from '../systems/catalog';
+import { useSystems } from '../systems/prefs';
 import { C } from '../theme';
 
 /* light palette — matches the rest of the app */
@@ -83,8 +85,16 @@ export default function WheelNav({
 }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const { enabled } = useSystems();
 
-  const tabs = ROUTE_META;
+  // Home + settings always ride the wheel; every other segment follows the
+  // user's system choice (settings/home belong to no system → always shown).
+  const tabs = useMemo(() => ROUTE_META.filter((r) => {
+    if (r.key === 'home' || r.key === 'settings') return true;
+    const sys = systemForRoute(r.key);
+    if (!sys) return true;
+    return enabled.includes(sys.key);
+  }), [enabled]);
   const count = tabs.length;
   const step = 360 / count;
 

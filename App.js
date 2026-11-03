@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, BackHandler, Easing, Platform, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Animated, BackHandler, Easing, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import Svg, { Circle, Line } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -9,21 +9,40 @@ import {
   DMSans_400Regular,
   DMSans_500Medium,
   DMSans_700Bold,
+  DMSans_400Regular_Italic,
 } from '@expo-google-fonts/dm-sans';
 import { DMMono_400Regular, DMMono_500Medium } from '@expo-google-fonts/dm-mono';
+import {
+  Syne_400Regular,
+  Syne_600SemiBold,
+  Syne_700Bold,
+  Syne_800ExtraBold,
+} from '@expo-google-fonts/syne';
 
-import { startCacheLifecycle } from './src/api/cacheLifecycle';
+import { startCacheLifecycle, stopCacheLifecycle } from './src/api/cacheLifecycle';
+import { startConnectivity } from './src/api/connectivity';
+import { startSyncEngine, syncNow } from './src/api/syncEngine';
+import { initNotifications, rescheduleOnBoot } from './src/notifications/reminders';
+import { bootAlarms } from './src/alarms/store';
+import { bootDateKeeper } from './src/datekeeper/store';
+import SyncBanner from './src/components/SyncBanner';
+import MiniPlayer from './src/components/MiniPlayer';
+import { attachPlayer } from './src/player/engine';
 import AppSplash from './src/components/AppSplash';
 import ScreenFrame from './src/components/ScreenFrame';
 import WheelNav from './src/components/WheelNav';
 import { getRoute } from './src/navigation/routes';
-import { C } from './src/theme';
+import { C, F } from './src/theme';
 
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { useAudioPlayer } from 'expo-audio';
+import { useSystems } from './src/systems/prefs';
+import { systemForRoute } from './src/systems/catalog';
 import RegisterScreen from './src/screens/RegisterScreen';
 import Gate1Screen from './src/screens/Gate1Screen';
 import Gate2Screen from './src/screens/Gate2Screen';
 import Gate3Screen from './src/screens/Gate3Screen';
+import SystemPickerScreen from './src/screens/SystemPickerScreen';
 
 const ACCEPTS_BACK = new Set(['blog']);
 
@@ -70,10 +89,18 @@ function AppBoot() {
     DMSans_400Regular,
     DMSans_500Medium,
     DMSans_700Bold,
+    DMSans_400Regular_Italic,
     DMMono_400Regular,
     DMMono_500Medium,
+    // Preloaded so Wishlist / MusicVibes per-screen useFonts() resolve from
+    // cache instead of flashing a spinner mid-navigation.
+    Syne_400Regular,
+    Syne_600SemiBold,
+    Syne_700Bold,
+    Syne_800ExtraBold,
   });
   const { ready, isAuthenticated } = useAuth();
+  const systems = useSystems();
 
   // Splash plays first (covers font load), then the auth gate decides shell vs login flow.
   if (!booted) {
@@ -87,8 +114,8 @@ function AppBoot() {
     );
   }
 
-  // Wait for fonts + SecureStore hydration before branching.
-  if (!fontsLoaded || !ready) {
+  // Wait for fonts + auth + system prefs hydration before branching.
+  if (!fontsLoaded || !ready || !systems.ready) {
     return (
       <>
         <StatusBar style="dark" />
@@ -98,6 +125,15 @@ function AppBoot() {
   }
 
   if (isAuthenticated) {
+    // First run (or first run after this feature): choose systems.
+    if (!systems.onboarded) {
+      return (
+        <View style={st.root}>
+          <StatusBar style="dark" />
+          <SystemPickerScreen />
+        </View>
+      );
+    }
     return <AppShell />;
   }
   return <AuthFlow />;
@@ -108,8 +144,11 @@ function AppShell() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { logout } = useAuth();
+  const { enabled } = useSystems();
   const [wheelOpen, setWheelOpen] = useState(false);
   const [activeKey, setActiveKey] = useState('home');
+  // One audio player for the whole session — music keeps playing across screens.
+  const audioPlayer = useAudioPlayer();
 
   const wheelRef = useRef(wheelOpen);
   wheelRef.current = wheelOpen;
@@ -124,18 +163,39 @@ function AppShell() {
   }), [width, insets.top]);
 
   useEffect(() => {
+    startConnectivity();
     startCacheLifecycle();
+    startSyncEngine();
+    attachPlayer(audioPlayer);
+    initNotifications().then(() => {
+      rescheduleOnBoot().catch(() => {});
+      bootAlarms().catch(() => {});
+      bootDateKeeper().catch(() => {});
+      // Drain anything queued while the app was closed.
+      syncNow().catch(() => {});
+    }).catch(() => {});
+    return () => stopCacheLifecycle();
   }, []);
 
   const navigate = useCallback((key) => {
+    // A disabled system's screen can never be opened (wheel hides it too —
+    // this is the backstop for programmatic navigation).
+    const sys = systemForRoute(key);
+    if (sys && !enabled.includes(sys.key)) return;
     setActiveKey(key);
     setWheelOpen(false);
-  }, []);
+  }, [enabled]);
 
   const goHome = useCallback(() => {
     setActiveKey('home');
     setWheelOpen(false);
   }, []);
+
+  // If the open screen's system gets disabled (e.g. from Settings), fall home.
+  useEffect(() => {
+    const sys = systemForRoute(activeKey);
+    if (sys && !enabled.includes(sys.key)) setActiveKey('home');
+  }, [enabled, activeKey]);
 
   const handleLogout = useCallback(async () => {
     await logout();
@@ -232,6 +292,9 @@ function AppShell() {
         >
           <Text style={st.logoutText}>Logout</Text>
         </TouchableOpacity>
+
+        <MiniPlayer hidden={activeKey === 'player'} />
+        <SyncBanner />
       </View>
     </>
   );
@@ -256,7 +319,8 @@ function AuthFlow() {
     setMode('gate2');
   }, []);
 
-  const handleGate2Success = useCallback(() => {
+  const handleGate2Success = useCallback((token) => {
+    if (token) setPreauthToken(token);
     setMode('gate3');
   }, []);
 
@@ -324,7 +388,7 @@ const st = StyleSheet.create({
     zIndex: 45,
   },
   logoutText: {
-    fontFamily: C.mono,
+    fontFamily: F.mono,
     fontSize: 10,
     color: C.soft,
   },

@@ -112,3 +112,10 @@ them now reads through the cache and writes through `mutate` (optimistic + persi
 `cache-test/test.mjs` + `test2.mjs` (Node, mocked AsyncStorage) cover: first fetch, fresh-cache
 short-circuit, request dedupe, stale revalidation, optimistic broadcast, offline fallback,
 prefix invalidation, disk round-trip, corrupt-entry recovery, eviction and pruning.
+
+## Status correction (2026-11)
+`src/api/activityKinds.js`, `src/api/activity.js`, `src/hooks/useActivity.js`
+and `cache-test/` were planned but **never implemented** — the tree has
+`auth, cache, cacheLifecycle, cacheStore, http, resources` + `useCachedResource`
+only. Treat the "New files" rows for those three + the Tests § as aspirational
+until they land.

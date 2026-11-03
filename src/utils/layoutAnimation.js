@@ -7,6 +7,6 @@ import { Platform, UIManager } from 'react-native';
  */
 export function enableLayoutAnimation() {
   if (Platform.OS !== 'android') return;
-  if (global.nativeFabricUIManager) return; // New Architecture: already enabled
+  if (typeof global !== 'undefined' && global.nativeFabricUIManager) return; // New Architecture: already enabled
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }

@@ -294,7 +294,7 @@ const AboutMe = () => {
               <SectionLabel accent>02 — CLEARANCE & VISION MATRIX</SectionLabel>
               <Grid2>
                 <Field label="BASE SECRET CODE (required: 8888)" required accent>
-                  <Input type="password" name="baseSecretCode" placeholder={existingRecord ? '•••• (leave blank to keep)' : '8888'} value={formData.baseSecretCode} onChange={handleChange} inputMode="numeric" maxLength={4} pattern="[0-9]*" required={!existingRecord} disabled={isSubmitting} accent />
+                  <Input type="password" name="baseSecretCode" placeholder={existingRecord ? '•••• (leave blank to keep)' : '8888'} value={formData.baseSecretCode} onChange={handleChange} inputMode="text" maxLength={8} required={!existingRecord} disabled={isSubmitting} accent />
                 </Field>
                 <Field label="SIDEBAR SEQUENTIAL CODE" accent>
                   <Input name="sidebarCode" placeholder="Up-Up-Down-Down-Left-Right..." value={formData.sidebarCode} onChange={handleChange} disabled={isSubmitting} accent />

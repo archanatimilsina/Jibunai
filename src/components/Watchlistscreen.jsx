@@ -6,9 +6,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
-import useCachedResource from '../hooks/useCachedResource';
-import { apiSend } from '../api/http';
-import { fetchResource, TTL } from '../api/resources';
+import useOfflineCollection from '../hooks/useOfflineCollection';
+import { TTL } from '../api/resources';
 
 
 const C = {
@@ -95,7 +94,8 @@ function Select({ value, options, onChange, placeholder, error, compact }) {
         <Feather name="chevron-down" size={13} color={C.soft} />
       </Pressable>
       <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={s.overlay} onPress={() => setOpen(false)}>
+        <View style={s.overlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} accessibilityLabel="Close options" />
           <View style={[s.sheet, { padding: 8 }]}>
             <ScrollView style={{ maxHeight: 380 }}>
               {opts.map((o) => {
@@ -110,7 +110,7 @@ function Select({ value, options, onChange, placeholder, error, compact }) {
               })}
             </ScrollView>
           </View>
-        </Pressable>
+        </View>
       </Modal>
     </>
   );
@@ -126,16 +126,22 @@ export default function WatchlistScreen() {
   const [savingId, setSavingId] = useState(null);
   const [apiError, setApiError] = useState('');
   const {
-    data: items,
+    items,
     loading,
     refreshing,
     errorText: loadError,
     refresh,
-    mutate,
-  } = useCachedResource('watchlist', () => fetchResource('watchlist'), {
+    isOnline,
+    pending,
+    create,
+    update,
+    remove,
+  } = useOfflineCollection('watchlist', {
     ttl: TTL.STATIC,
     initial: [],
-    errorMessage: 'Failed to load watchlist. Check your connection.',
+    createPath: '/watchlist/',
+    itemPath: (id) => `/watchlist/${id}/`,
+    updateMethod: 'PUT',
   });
 
   const [tab, setTab] = useState('All');
@@ -181,17 +187,14 @@ export default function WatchlistScreen() {
     setSavingId(isEdit ? editItem.id : 'new');
     setApiError('');
     try {
-      const saved = await apiSend(
-        isEdit ? `/watchlist/${editItem.id}/` : '/watchlist/',
-        isEdit ? 'PUT' : 'POST',
-        { type: form.type, title: form.title.trim(), genre: form.genre.trim(), status: statusApi(form.status) },
-      );
+      const payload = { type: form.type, title: form.title.trim(), genre: form.genre.trim(), status: statusApi(form.status) };
       if (isEdit) {
-        mutate((p) => (p || []).map((x) => (x.id === editItem.id ? saved : x)));
-        showToast(`"${saved.title}" updated!`);
+        const { offline } = await update(editItem.id, payload);
+        showToast(offline ? `"${form.title.trim()}" saved on this device — will sync.` : `"${form.title.trim()}" updated!`);
       } else {
-        mutate((p) => [saved, ...(p || [])]);
-        showToast(`"${saved.title}" added!`);
+        const { data, offline } = await create(payload);
+        const title = (data && data.title) || form.title.trim();
+        showToast(offline ? `"${title}" saved on this device — will sync.` : `"${title}" added!`);
       }
       setModal(null);
     } catch (err) { setApiError(err.message || 'Save failed.'); }
@@ -202,10 +205,9 @@ export default function WatchlistScreen() {
     if (!delTarget) return;
     setSavingId(delTarget.id); setApiError('');
     try {
-      await apiSend(`/watchlist/${delTarget.id}/`, 'DELETE');
-      mutate((p) => (p || []).filter((x) => x.id !== delTarget.id));
+      const { offline } = await remove(delTarget.id);
       setSelectedId((id) => (id === delTarget.id ? null : id));
-      showToast(`"${delTarget.title}" removed.`, 'trash-2');
+      showToast(offline ? `"${delTarget.title}" removed on this device — will sync.` : `"${delTarget.title}" removed.`, 'trash-2');
       setDelTarget(null);
     } catch (err) { setApiError(err.message || 'Could not delete item.'); setDelTarget(null); }
     finally { setSavingId(null); }
@@ -357,11 +359,11 @@ export default function WatchlistScreen() {
         </View>
       </ScrollView>
 
-      {}
       <Modal transparent visible={!!modal} animationType="fade" onRequestClose={closeModal}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <Pressable style={s.overlay} onPress={closeModal}>
-            <Pressable style={s.panel} onPress={() => {}}>
+          <View style={s.overlay}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={closeModal} accessibilityLabel="Close dialog" />
+            <View style={s.panel}>
               <Pressable onPress={closeModal} style={s.close}><Feather name="x" size={14} color={C.soft} /></Pressable>
               <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                 <Text style={s.modalTitle}>{modal === 'add' ? 'Recording New Achievement' : 'Edit Entry'}</Text>
@@ -394,15 +396,15 @@ export default function WatchlistScreen() {
                   <Pressable onPress={closeModal} style={s.cancelBtn}><Text style={s.cancelText}>Cancel</Text></Pressable>
                 </View>
               </ScrollView>
-            </Pressable>
-          </Pressable>
+            </View>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
 
-      {}
       <Modal transparent visible={!!delTarget} animationType="fade" onRequestClose={() => setDelTarget(null)}>
-        <Pressable style={s.overlay} onPress={() => setDelTarget(null)}>
-          <Pressable style={[s.panel, { maxWidth: 400, alignItems: 'center' }]} onPress={() => {}}>
+        <View style={s.overlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setDelTarget(null)} accessibilityLabel="Dismiss" />
+          <View style={[s.panel, { maxWidth: 400, alignItems: 'center' }]}>
             <Feather name="trash-2" size={30} color={C.red} />
             <Text style={[s.emptyTitle, { marginTop: 10 }]}>Remove from Watchlist?</Text>
             <Text style={[s.emptyDesc, { textAlign: 'center', marginBottom: 22 }]}>
@@ -415,8 +417,8 @@ export default function WatchlistScreen() {
               </Pressable>
               <Pressable onPress={() => setDelTarget(null)} style={s.cancelBtn}><Text style={s.cancelText}>Keep It</Text></Pressable>
             </View>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {toast && (

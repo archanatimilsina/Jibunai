@@ -14,9 +14,8 @@ import {
 import { DMSans_400Regular, DMSans_500Medium } from '@expo-google-fonts/dm-sans';
 import { DMMono_400Regular, DMMono_500Medium } from '@expo-google-fonts/dm-mono';
 
-import useCachedResource from '../hooks/useCachedResource';
-import { apiSend } from '../api/http';
-import { fetchResource, TTL } from '../api/resources';
+import useOfflineCollection from '../hooks/useOfflineCollection';
+import { TTL } from '../api/resources';
 
 
 
@@ -207,7 +206,7 @@ function MysticBar() {
       )}
       <Animated.Text style={[st.mysticGlyph, glyphStyle]}>✦</Animated.Text>
       <Text style={st.mysticText}>
-        A wish written here is <Text style={st.mysticEm}>bound</Text>. Once you write, it cannot be removed.
+        A wish written here is <Text style={st.mysticEm}>bound</Text>. Tend it gently — edit or release it anytime.
       </Text>
       <Animated.Text style={[st.mysticGlyph, glyphStyle]}>✦</Animated.Text>
     </LinearGradient>
@@ -328,16 +327,22 @@ export default function Wishlist() {
   const titleSize = width >= 900 ? 38 : width >= 500 ? 30 : 26;
 
   const {
-    data: wishes,
+    items: wishes,
     loading,
     refreshing,
     errorText: fetchError,
     refresh,
-    mutate,
-  } = useCachedResource('wishes', () => fetchResource('wishes'), {
+    isOnline,
+    pending,
+    create,
+    update,
+    remove,
+  } = useOfflineCollection('wishes', {
     ttl: TTL.STATIC,
     initial: [],
-    errorMessage: 'Could not load wishes. Make sure the backend is running.',
+    createPath: '/wishes/',
+    itemPath: (id) => `/wishes/${id}/`,
+    updateMethod: 'PUT',
   });
   const [toast, setToast] = useState(null);
 
@@ -361,14 +366,13 @@ export default function Wishlist() {
     if (!newWish.wish.trim() || creating) return;
     setCreating(true);
     try {
-      const created = await apiSend('/wishes/', 'POST', {
+      const { offline } = await create({
         emoji: newWish.emoji.trim() || '✨',
         wish: newWish.wish.trim(),
       });
-      mutate((p) => [created, ...(p || [])]);
       setNewWish(EMPTY_NEW);
       setIsCreating(false);
-      showToast('Wish added ✨');
+      showToast(offline ? 'Wish saved on this device — will sync when online.' : 'Wish added ✨');
     } catch (err) {
       showToast(err.message || 'Failed to save.', 'error');
     } finally {
@@ -387,29 +391,27 @@ export default function Wishlist() {
     if (!editWish.wish.trim()) return;
     setUpdating(true);
     try {
-      const updated = await apiSend(`/wishes/${id}/`, 'PUT', {
+      const { offline } = await update(id, {
         emoji: editWish.emoji.trim() || '✨',
         wish: editWish.wish.trim(),
       });
-      mutate((p) => (p || []).map((w) => (w.id === id ? updated : w)));
       setEditingId(null);
-      showToast('Wish updated.');
+      showToast(offline ? 'Update saved on this device — will sync.' : 'Wish updated.');
     } catch (err) {
       showToast(err.message || 'Update failed.', 'error');
     } finally {
       setUpdating(false);
     }
-  }, [editWish, showToast]);
+  }, [editWish, showToast, update]);
 
   const performDelete = useCallback(async (id) => {
     try {
-      await apiSend(`/wishes/${id}/`, 'DELETE');
-      mutate((p) => (p || []).filter((w) => w.id !== id));
-      showToast('Wish removed.');
+      const { offline } = await remove(id);
+      showToast(offline ? 'Removed on this device — will sync.' : 'Wish removed.');
     } catch (err) {
       showToast(err.message || 'Delete failed.', 'error');
     }
-  }, [showToast]);
+  }, [showToast, remove]);
 
   const handleDelete = useCallback((id) => {
     Alert.alert('Remove this wish?', 'This will remove it permanently.', [

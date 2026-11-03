@@ -16,11 +16,19 @@ import RegisterScreen from '../screens/RegisterScreen';
 import Gate1Screen from '../screens/Gate1Screen';
 import Gate2Screen from '../screens/Gate2Screen';
 import Gate3Screen from '../screens/Gate3Screen';
+import SettingsScreen from '../screens/SettingsScreen';
+import AlarmScreen from '../screens/AlarmScreen';
+import DateKeeperScreen from '../screens/DateKeeperScreen';
+import PlayerScreen from '../screens/PlayerScreen';
 
 import { ROUTE_META, GROUPS } from './routeMeta';
 
 const SCREENS = {
   home: HomeScreen,
+  settings: SettingsScreen,
+  alarm: AlarmScreen,
+  datekeeper: DateKeeperScreen,
+  player: PlayerScreen,
   register: RegisterScreen,
   gate1: Gate1Screen,
   gate2: Gate2Screen,

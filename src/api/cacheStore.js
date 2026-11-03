@@ -28,7 +28,10 @@ const storageKey = (key) => `${PREFIX}${key}`;
 
 const estimateBytes = (value) => {
   try {
-    return JSON.stringify(value).length;
+    const s = JSON.stringify(value) ?? '';
+    // JSON length counts UTF-16 code units — TextEncoder gives real bytes.
+    if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(s).length;
+    return s.length;
   } catch {
     return 0;
   }

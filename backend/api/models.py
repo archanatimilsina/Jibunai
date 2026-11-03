@@ -4,20 +4,35 @@ import uuid
 from django.core.validators import RegexValidator
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
+from django.contrib.auth.hashers import make_password, check_password, identify_hasher
 from django.utils.translation import gettext_lazy as _
 from datetime import timedelta
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
-from django.utils import timezone
-import uuid
-from django.core.exceptions import ValidationError
-from django.db import models
-from datetime import timedelta
-from django.db import models
-from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.utils.text import slugify
+
+
+def is_password_hashed(value):
+    """True if value already looks like a Django password hash."""
+    try:
+        identify_hasher(value or '')
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def verify_secret(stored, candidate):
+    """check_password for hashes, constant-time == for legacy plaintext."""
+    if not stored:
+        return False
+    if is_password_hashed(stored):
+        try:
+            return check_password(candidate or '', stored)
+        except (ValueError, TypeError):
+            return False
+    import hmac
+    return hmac.compare_digest(str(stored), str(candidate or ''))
 
 
 class ProfessionalDevelopment(models.Model):
@@ -136,7 +151,8 @@ class AboutMe(models.Model):
         null=True, 
     )
     base_secret_code = models.CharField(
-        max_length=4, 
+        # Holds the 4–8 char secret OR its ~86-char pbkdf2 hash (see save()).
+        max_length=128,
     )
     sidebar_code = models.CharField(
         max_length=100, 
@@ -154,6 +170,13 @@ class AboutMe(models.Model):
 
     def __str__(self):
         return f"{self.name}"
+
+    def save(self, *args, **kwargs):
+        # Never persist the gate credential in plaintext: hash anything that
+        # isn't already a hash (covers register view, DRF writes, admin).
+        if self.base_secret_code and not is_password_hashed(self.base_secret_code):
+            self.base_secret_code = make_password(self.base_secret_code)
+        super().save(*args, **kwargs)
     
 class DayLog(models.Model):
     MOOD_CHOICES = [
@@ -522,10 +545,14 @@ class Challenge(models.Model):
             raise ValidationError({'end_date': 'End date must be on or after the start date.'})
 
     def save(self, *args, **kwargs):
+        # Guard None so a half-filled ORM/admin save can't TypeError (API
+        # callers get a clean 400 from ChallengeSerializer.validate first).
         if self.type == self.ChallengeType.DAYS:
-            self.end_date = self.start_date + timedelta(days=self.duration_days - 1)
+            if self.start_date and self.duration_days:
+                self.end_date = self.start_date + timedelta(days=self.duration_days - 1)
         elif self.type == self.ChallengeType.INSTANT:
-            self.duration_days = (self.end_date - self.start_date).days + 1
+            if self.start_date and self.end_date:
+                self.duration_days = (self.end_date - self.start_date).days + 1
         super().save(*args, **kwargs)
 
     def is_today_editable(self):
@@ -656,7 +683,11 @@ class BlogCategory(models.Model):
     name = models.CharField(max_length=100, unique=True)
     slug = models.SlugField(max_length=120, unique=True, blank=True)
     description = models.CharField(max_length=255, blank=True)
-    color = models.CharField(max_length=7, default='#2d6a4f')
+    color = models.CharField(
+        max_length=7,
+        default='#2d6a4f',
+        validators=[RegexValidator(regex=r'^#(?:[0-9a-fA-F]{3}){1,2}$')],
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -765,6 +796,8 @@ class BlogPost(models.Model):
 
         if self.status == self.Status.PUBLISHED and not self.published_at:
             self.published_at = timezone.now()
+        elif self.status != self.Status.PUBLISHED:
+            self.published_at = None
 
         if isinstance(self.tags, list):
             seen, cleaned = set(), []

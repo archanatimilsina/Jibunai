@@ -1,9 +1,9 @@
-from django.shortcuts import render
 from django.db import connection
 from django.db.models import F, Q, Count, Sum
 from rest_framework import generics, status
 from rest_framework.pagination import PageNumberPagination
 from .models import Challenge, ChallengeDay, PDFDocument, ProfessionalDevelopment, Project, AboutMe, DayLog, OperativeGoal, GoalDayStatus, ScrapbookStamp, OperativeNote, DreamWish, WatchlistItem, HobbyItem, MusicVibeItem, Task, BlogCategory, BlogPost, BlogComment
+from .models import verify_secret, is_password_hashed
 from .serializers import ChallengeSerializer,PDFDocumentSerializer, InstantStatusSerializer, ProfessionalDevelopmentSerializer, ProjectSerializer, DreamWishSerializer, HobbyItemSerializer, MusicVibeItemSerializer, TaskSerializer, AboutMeSerializer, DayLogSerializer, OperativeNoteSerializer, ScrapbookStampSerializer, DreamWishSerializer, WatchlistItemSerializer, OperativeGoalSerializer, BlogCategorySerializer, BlogPostListSerializer, BlogPostDetailSerializer, BlogCommentSerializer, BlogImageUploadSerializer
 from django.core.files.storage import default_storage
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser 
@@ -11,8 +11,17 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework.decorators import action
-from django.http import HttpResponse, Http404
+from django.http import FileResponse, HttpResponse, Http404
+from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.permissions import AllowAny
+import hmac
+import re
+from io import BytesIO
+from .authentication import (
+    PREAUTH_SALT, GATE2_SALT, AUTH_SALT,
+    PREAUTH_MAX_AGE, GATE2_MAX_AGE, AUTH_MAX_AGE,
+)
 
 
 class HealthView(APIView):
@@ -166,27 +175,47 @@ class TaskRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
  
 
 class VerifySecretView(APIView):
+    # Pre-auth oracle by design (web lock screen + old clients call this
+    # before login). Brute force is blunted by the `verify` throttle +
+    # hashed comparison; the gate credential itself is never returned.
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'verify'
+
     def post(self, request):
-        field = request.data.get('field') 
+        field = request.data.get('field')
         value = request.data.get('value', '')
-        
+
         record = AboutMe.objects.first()
         if not record:
             return Response({'allowed': False})
-        
+
         if field == 'gate':
-            allowed = value == record.base_secret_code
+            allowed = verify_secret(record.base_secret_code, str(value))
+            if allowed and not is_password_hashed(record.base_secret_code):
+                # Transparent upgrade: re-hash the legacy plaintext secret.
+                # Guarded: pre-migration columns are too narrow for hashes.
+                try:
+                    record.base_secret_code = str(value)
+                    record.save(update_fields=['base_secret_code'])
+                except Exception:
+                    pass
         elif field == 'sidebar':
-            allowed = value == record.sidebar_code
+            allowed = hmac.compare_digest(str(value), record.sidebar_code or '')
         elif field == 'dream':
-            allowed = value == record.portal_dream
+            allowed = hmac.compare_digest(str(value).strip().lower(), (record.portal_dream or '').strip().lower())
         else:
             allowed = False
-            
+
         return Response({'allowed': allowed})
 
 
 class SecretMetaView(APIView):
+
+    # Same pre-auth rationale as VerifySecretView: lengths only, no secrets.
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
     MAX_LEN = 12
 
@@ -203,6 +232,175 @@ class SecretMetaView(APIView):
             'gate_length':    length(record.base_secret_code),
             'sidebar_length': length(record.sidebar_code),
         })
+
+
+# ---------------------------------------------------------------------------
+# Compat auth shim for the mobile 3-gate flow (POST /api/auth/...).
+# Single-owner app: the first AboutMe row is the account. Tokens are signed
+# (stateless) — no new model/migration. Mirrors src/api/auth.js + validation.js.
+# Salts/ages live in .authentication (imported above) to avoid a cycle.
+# ---------------------------------------------------------------------------
+
+
+def _auth_record():
+    return AboutMe.objects.first()
+
+
+def _auth_user_payload(record, username):
+    return {'name': record.name, 'username': username}
+
+
+class AuthRegisterView(APIView):
+    authentication_classes = []
+    permission_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth'
+
+    def post(self, request):
+        full_name = str(request.data.get('full_name') or '').strip()
+        username = str(request.data.get('username') or '').strip()
+        date_of_birth = str(request.data.get('date_of_birth') or '').strip()
+        dream = str(request.data.get('dream') or '').strip()
+        secret_code = request.data.get('secret_code')
+        secret_code = '' if secret_code is None else str(secret_code)
+
+        if not full_name:
+            return Response({'detail': 'Full name is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(username) < 3:
+            return Response({'detail': 'Username must be at least 3 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not date_of_birth:
+            return Response({'detail': 'Date of birth is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not dream:
+            return Response({'detail': 'Dream is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not secret_code.strip() or not (4 <= len(secret_code) <= 8):
+            return Response(
+                {'detail': 'Secret code must be between 4 and 8 characters.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        record = _auth_record()
+        if record is None:
+            record = AboutMe(
+                name=full_name,
+                email=f'{username}@jibunai.local',
+                portal_dream=dream,
+                base_secret_code=secret_code,
+            )
+            record.save()
+        else:
+            record.name = full_name
+            record.portal_dream = dream
+            record.base_secret_code = secret_code
+            record.save(update_fields=['name', 'portal_dream', 'base_secret_code'])
+
+        return Response(
+            {'name': record.name, 'username': username, 'dream': dream},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class AuthGate1View(APIView):
+    authentication_classes = []
+    permission_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth'
+
+    def post(self, request):
+        username = str(request.data.get('username') or '').strip()
+        if not username:
+            return Response({'detail': 'Name / username is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if _auth_record() is None:
+            return Response({'detail': 'No account yet. Please register first.'}, status=status.HTTP_404_NOT_FOUND)
+        token = TimestampSigner(salt=PREAUTH_SALT).sign(f'gate1:{username}')
+        return Response({'preauth_token': token})
+
+
+class AuthGate2View(APIView):
+    authentication_classes = []
+    permission_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'verify'
+
+    def post(self, request):
+        preauth = request.data.get('preauth_token') or ''
+        dream = str(request.data.get('dream') or '').strip()
+        if not dream:
+            return Response({'detail': 'Dream is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            unsigned = TimestampSigner(salt=PREAUTH_SALT).unsign(preauth, max_age=PREAUTH_MAX_AGE)
+        except (BadSignature, SignatureExpired):
+            return Response(
+                {'detail': 'Session expired. Start again from Gate 1.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        username = unsigned.partition(':')[2] or unsigned
+        record = _auth_record()
+        if record is None or not hmac.compare_digest((record.portal_dream or '').strip().lower(), dream.lower()):
+            return Response({'detail': 'Dream does not match our records.'}, status=status.HTTP_400_BAD_REQUEST)
+        token = TimestampSigner(salt=GATE2_SALT).sign(f'gate2:{username}')
+        return Response({'preauth_token': token, 'ok': True})
+
+
+class AuthGate3View(APIView):
+    authentication_classes = []
+    permission_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'verify'
+
+    def post(self, request):
+        preauth = request.data.get('preauth_token') or ''
+        secret_code = request.data.get('secret_code')
+        secret_code = '' if secret_code is None else str(secret_code)
+        try:
+            unsigned = TimestampSigner(salt=GATE2_SALT).unsign(preauth, max_age=GATE2_MAX_AGE)
+        except (BadSignature, SignatureExpired):
+            return Response(
+                {'detail': 'Session expired. Start again from Gate 1.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        username = unsigned.partition(':')[2] or unsigned
+        record = _auth_record()
+        if record is None or not verify_secret(record.base_secret_code, secret_code):
+            return Response({'detail': 'Invalid secret code. Try again.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not is_password_hashed(record.base_secret_code or ''):
+            # Transparent upgrade: re-hash the legacy plaintext secret.
+            # Guarded: pre-migration columns are too narrow for hashes.
+            try:
+                record.base_secret_code = secret_code
+                record.save(update_fields=['base_secret_code'])
+            except Exception:
+                pass
+        auth_token = TimestampSigner(salt=AUTH_SALT).sign(f'auth:{username}')
+        return Response({'auth_token': auth_token, 'user': _auth_user_payload(record, username)})
+
+
+class AuthLogoutView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        # Stateless signed tokens: nothing to revoke server-side.
+        return Response({'ok': True})
+
+
+class AuthMeView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        raw = request.META.get('HTTP_AUTHORIZATION', '')
+        token = raw[7:] if raw.startswith('Bearer ') else (request.query_params.get('token') or '')
+        if not token:
+            return Response({'detail': 'Missing auth token.'}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            unsigned = TimestampSigner(salt=AUTH_SALT).unsign(token, max_age=AUTH_MAX_AGE)
+        except (BadSignature, SignatureExpired):
+            return Response({'detail': 'Invalid or expired token.'}, status=status.HTTP_401_UNAUTHORIZED)
+        username = unsigned.partition(':')[2] or unsigned
+        record = _auth_record()
+        if record is None:
+            return Response({'detail': 'No account found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(_auth_user_payload(record, username))
 
 class ChallengeListCreateAPIView(generics.ListCreateAPIView):
     queryset = Challenge.objects.all()
@@ -266,7 +464,22 @@ class ChallengeInstantStatusAPIView(APIView):
 
 def _storage_bytes(file_field):
     storage = file_field.storage
-    return storage.client.storage.from_(storage.bucket_name).download(file_field.name)
+    client = getattr(storage, 'client', None)
+    bucket = getattr(storage, 'bucket_name', None)
+    if client is not None and bucket:
+        return bytes(client.storage.from_(bucket).download(file_field.name))
+    # Local / default storage fallback (never 500 on missing attrs).
+    file_field.open('rb')
+    try:
+        return file_field.read()
+    finally:
+        file_field.close()
+
+
+def _safe_filename(name, default='file'):
+    base = (name or default).split('/')[-1].split('\\')[-1]
+    base = re.sub(r'[^A-Za-z0-9._-]', '_', base).strip('._') or default
+    return base[:100]
 
 
 class PDFListCreateView(generics.ListCreateAPIView):
@@ -295,10 +508,16 @@ class PDFDownloadView(APIView):
         except Exception:
             raise Http404("File not found in storage.")
 
-        filename = doc.file.name.split("/")[-1]
-        response = HttpResponse(data, content_type="application/pdf")
-        response["Content-Disposition"] = f'attachment; filename="{filename}"'
-        return response
+        filename = _safe_filename(getattr(doc.file, 'name', 'document.pdf'), default='document.pdf')
+        if not filename.lower().endswith('.pdf'):
+            filename += '.pdf'
+        # FileResponse streams instead of buffering the whole file in memory.
+        return FileResponse(
+            BytesIO(bytes(data)),
+            content_type='application/pdf',
+            filename=filename,
+            as_attachment=True,
+        )
 
 
 class BlogCategoryListCreateAPIView(generics.ListCreateAPIView):
@@ -364,7 +583,8 @@ class BlogPostListCreateAPIView(generics.ListCreateAPIView):
 
         tag = params.get('tag')
         if tag:
-            qs = qs.filter(tags__icontains=tag)
+            # tags is a JSON list — contains, not icontains (which 500s on Postgres).
+            qs = qs.filter(tags__contains=[tag])
 
         featured = params.get('featured')
         if featured in ('true', '1'):
@@ -376,7 +596,7 @@ class BlogPostListCreateAPIView(generics.ListCreateAPIView):
                 Q(title__icontains=search)
                 | Q(excerpt__icontains=search)
                 | Q(content__icontains=search)
-                | Q(tags__icontains=search)
+                | Q(tags__contains=[search])
             )
 
         ordering = params.get('ordering')

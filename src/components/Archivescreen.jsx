@@ -9,9 +9,8 @@ import * as MediaLibrary from 'expo-media-library';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Eye, Pencil, Trash2, Download, X, ChevronLeft, ChevronRight, Plus } from 'lucide-react-native';
 
-import useCachedResource from '../hooks/useCachedResource';
-import { apiSend, apiUpload } from '../api/http';
-import { fetchResource, TTL } from '../api/resources';
+import useOfflineCollection from '../hooks/useOfflineCollection';
+import { TTL } from '../api/resources';
 
 const C = {
   dark: '#1a1a2e', soft: '#7a7567', border: '#d8d4cc', accent: '#eceae3', green: '#2d6a4f',
@@ -28,8 +27,11 @@ const Spinner = ({ color = '#fff', size = 'small' }) => <ActivityIndicator size=
 
 function MemoryCard({ stamp, onEdit, onDelete, onPreview, deleting }) {
   const [ratio, setRatio] = useState(4 / 3);
-  const tilt = useMemo(() => (((stamp.id * 7919) % 100) / 100 - 0.5) * 5, [stamp.id]);
-  const tapeLeft = stamp.id % 2 === 0;
+  const tilt = useMemo(() => {
+    const idNum = Number(stamp.id) || 0;
+    return (((idNum * 7919) % 100) / 100 - 0.5) * 5;
+  }, [stamp.id]);
+  const tapeLeft = (Number(stamp.id) || 0) % 2 === 0;
 
   return (
     <View style={[s.cardWrap, { transform: [{ rotate: `${tilt}deg` }] }]}>
@@ -152,16 +154,24 @@ export default function ArchiveScreen() {
   const pad = width >= 700 ? 32 : 18;
 
   const {
-    data: stamps,
+    items: stamps,
     loading,
     refreshing,
     errorText: fetchError,
     refresh,
-    mutate,
-  } = useCachedResource('archive', () => fetchResource('archive'), {
+    isOnline,
+    pending,
+    create,
+    createWithFile,
+    update,
+    updateWithFile,
+    remove,
+  } = useOfflineCollection('archive', {
     ttl: TTL.STATIC,
     initial: [],
-    errorMessage: 'Could not load the archive.',
+    createPath: '/archive/',
+    itemPath: (id) => `/archive/${id}/`,
+    imageField: 'image',
   });
 
   const [modal, setModal] = useState(false);
@@ -209,21 +219,19 @@ export default function ArchiveScreen() {
     if (form.source === 'remote' && !form.remoteUrl.trim()) { setFormErr('Please enter a remote image URL.'); return; }
     setSubmitting(true); setFormErr(null);
     try {
-      let created;
-      if (form.source === 'local') {
-        const fd = new FormData();
-        fd.append('title', form.title.trim()); fd.append('source', 'local'); fd.append('image', form.file);
-        created = await apiUpload('/archive/', fd);
-      } else {
-        created = await apiSend('/archive/', 'POST', {
-          title: form.title.trim(),
-          source: 'remote',
-          url: form.remoteUrl.trim(),
-        });
-      }
-      mutate((p) => [created, ...(p || [])]);
-      closeModal(); toast('Memory archived ✓');
-    } catch { setFormErr('Network error — check that the server is running and /api/archive/ is reachable.'); }
+      const { offline } = form.source === 'local'
+        ? await createWithFile(
+            { title: form.title.trim(), source: 'local' },
+            { uri: form.file.uri, name: form.file.name, type: form.file.type, field: 'image' },
+          )
+        : await create({
+            title: form.title.trim(),
+            source: 'remote',
+            url: form.remoteUrl.trim(),
+          });
+      closeModal();
+      toast(offline ? 'Memory saved on this device — will sync.' : 'Memory archived ✓');
+    } catch (e) { setFormErr(e?.message || 'Could not save. Check your connection and try again.'); }
     finally { setSubmitting(false); }
   };
 
@@ -231,33 +239,31 @@ export default function ArchiveScreen() {
     if (!form.title.trim()) { setFormErr('Title is required.'); return; }
     setSubmitting(true); setFormErr(null);
     try {
-      let updated;
-      if (form.source === 'local' && form.file) {
-        const fd = new FormData();
-        fd.append('title', form.title.trim()); fd.append('source', 'local'); fd.append('image', form.file);
-        updated = await apiUpload(`/archive/${editing.id}/`, fd, { method: 'PATCH' });
-      } else if (form.source === 'remote' && form.remoteUrl !== editing.remote_url) {
-        updated = await apiSend(`/archive/${editing.id}/`, 'PATCH', {
-          title: form.title.trim(),
-          source: 'remote',
-          url: form.remoteUrl.trim(),
-        });
-      } else {
-        updated = await apiSend(`/archive/${editing.id}/`, 'PATCH', { title: form.title.trim() });
-      }
-      mutate((p) => (p || []).map((x) => (x.id === editing.id ? updated : x)));
-      closeModal(); toast('Memory updated ✓');
-    } catch { setFormErr('Network error — check that the server is running.'); }
+      const { offline } = form.source === 'local' && form.file
+        ? await updateWithFile(
+            editing.id,
+            { title: form.title.trim(), source: 'local' },
+            { uri: form.file.uri, name: form.file.name, type: form.file.type, field: 'image' },
+          )
+        : form.source === 'remote' && form.remoteUrl !== editing.remote_url
+          ? await update(editing.id, {
+              title: form.title.trim(),
+              source: 'remote',
+              url: form.remoteUrl.trim(),
+            })
+          : await update(editing.id, { title: form.title.trim() });
+      closeModal();
+      toast(offline ? 'Update saved on this device — will sync.' : 'Memory updated ✓');
+    } catch (e) { setFormErr(e?.message || 'Could not save. Check your connection and try again.'); }
     finally { setSubmitting(false); }
   };
 
   const deleteNow = async (id) => {
     setDeletingId(id);
     try {
-      await apiSend(`/archive/${id}/`, 'DELETE');
-      mutate((p) => (p || []).filter((x) => x.id !== id));
-      toast('Memory removed');
-    } catch { toast('Network error.', true); }
+      const { offline } = await remove(id);
+      toast(offline ? 'Removed on this device — will sync.' : 'Memory removed');
+    } catch (e) { toast(e?.message || 'Could not delete.', true); }
     finally { setDeletingId(null); }
   };
   const handleDelete = (st) => Alert.alert('Remove this memory?', `“${st.title}” will be permanently removed.`, [
@@ -349,11 +355,11 @@ export default function ArchiveScreen() {
         </View>
       </ScrollView>
 
-      {}
       <Modal transparent visible={modal} animationType="fade" onRequestClose={closeModal}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <Pressable style={s.overlay} onPress={closeModal}>
-            <Pressable style={s.modal} onPress={() => {}}>
+          <View style={s.overlay}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={closeModal} accessibilityLabel="Close dialog" />
+            <View style={s.modal}>
               <Pressable onPress={closeModal} style={s.modalClose} hitSlop={8}><X size={20} color={C.soft} /></Pressable>
               <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                 <Text style={s.modalTitle}>{isEdit ? 'Modify Memory Stamp' : 'Log New Memory Node'}</Text>
@@ -410,8 +416,8 @@ export default function ArchiveScreen() {
                   </Pressable>
                 </View>
               </ScrollView>
-            </Pressable>
-          </Pressable>
+            </View>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
 

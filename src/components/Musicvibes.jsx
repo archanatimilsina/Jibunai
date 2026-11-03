@@ -7,6 +7,8 @@ import {
   KeyboardAvoidingView, RefreshControl, ActivityIndicator, Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts } from 'expo-font';
 import {
@@ -18,9 +20,12 @@ import {
 
 
 
-import useCachedResource from '../hooks/useCachedResource';
-import { apiSend } from '../api/http';
-import { fetchResource, TTL } from '../api/resources';
+import useOfflineCollection from '../hooks/useOfflineCollection';
+import { TTL } from '../api/resources';
+import { findTrackFor, loadLibrary } from '../player/library';
+import { isEngineReady, playQueue, subscribePlayer } from '../player/engine';
+
+const FAV_KEY = 'musicvibes:favorites';
 
 const C = {
   bg: '#f6f5f0',
@@ -295,6 +300,7 @@ function ToastItem({ t }) {
 const MusicCard = memo(function MusicCard({
   vibe, index, width, isEditing, editForm, setEditForm, editErr, saving, deleting,
   onStartEdit, onCancelEdit, onSubmitEdit, onDelete,
+  isFav, isPlaying, onToggleFav, onPlay,
 }) {
   const accent = isValidHex(vibe.color) ? fullHex(vibe.color) : C.accent;
   const dotBg = `${accent}28`;
@@ -375,6 +381,12 @@ const MusicCard = memo(function MusicCard({
               </View>
 
               <View style={st.cardActions}>
+                <IconBtn label={isPlaying ? 'Now playing' : `Play ${vibe.track}`} onPress={() => onPlay(vibe)}>
+                  <Feather name={isPlaying ? 'volume-2' : 'play'} size={13} color={isPlaying ? C.accent : C.dimmer} />
+                </IconBtn>
+                <IconBtn label={isFav ? 'Unfavorite' : 'Favorite'} onPress={() => onToggleFav(vibe.id)}>
+                  <Feather name="heart" size={13} color={isFav ? C.danger : C.dimmer} />
+                </IconBtn>
                 <IconBtn label="Edit track" onPress={() => onStartEdit(vibe)}>
                   <Text style={{ fontSize: 12, color: C.dimmer }}>✏</Text>
                 </IconBtn>
@@ -414,16 +426,21 @@ export default function MusicVibes() {
   const titleSize = width >= 900 ? 46 : width >= 500 ? 36 : 30;
 
   const {
-    data: vibes,
+    items: vibes,
     loading,
     refreshing,
     errorText: fetchErr,
     refresh,
-    mutate,
-  } = useCachedResource('musicVibes', () => fetchResource('musicVibes'), {
+    isOnline,
+    pending,
+    create,
+    update,
+    remove,
+  } = useOfflineCollection('musicVibes', {
     ttl: TTL.STATIC,
     initial: [],
-    errorMessage: 'Could not load tracks. Check that Django is running.',
+    createPath: '/music-vibes/',
+    itemPath: (id) => `/music-vibes/${id}/`,
   });
 
   const [isCreating, setIsCreating] = useState(false);
@@ -438,12 +455,90 @@ export default function MusicVibes() {
 
   const [deletingId, setDeletingId] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const toastTimers = useRef([]);
 
   const toast = useCallback((msg, err = false) => {
     const id = Date.now() + Math.random();
     setToasts((t) => [...t, { id, msg, err }].slice(-3));
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
+    toastTimers.current.push(
+      setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500),
+    );
   }, []);
+
+  useEffect(() => () => {
+    toastTimers.current.forEach(clearTimeout);
+    toastTimers.current = [];
+  }, []);
+
+  // Favorites live on this device (like blog likes) — no backend change needed.
+  const [favorites, setFavorites] = useState(() => new Set());
+  const [favOnly, setFavOnly] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem(FAV_KEY).then((raw) => {
+      if (raw) {
+        try {
+          setFavorites(new Set(JSON.parse(raw)));
+        } catch {
+          /* corrupt favorites reset silently */
+        }
+      }
+    }).catch(() => {});
+  }, []);
+  const persistFavs = (set) => AsyncStorage.setItem(FAV_KEY, JSON.stringify([...set])).catch(() => {});
+  const toggleFav = useCallback((id) => {
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      persistFavs(next);
+      return next;
+    });
+  }, []);
+
+  // Device-library matching for playback (cached per session).
+  const deviceTracksRef = useRef(null);
+  const [playingVibeId, setPlayingVibeId] = useState(null);
+  const playingTrackRef = useRef(null);
+  useEffect(() => subscribePlayer((snap) => {
+    if (!snap.track || snap.track.id !== playingTrackRef.current) {
+      playingTrackRef.current = snap.track?.id || null;
+      setPlayingVibeId((prev) => (prev && snap.track ? prev : null));
+    }
+  }), []);
+
+  const matchDevice = (vibe, tracks) => findTrackFor(tracks, vibe.artist, vibe.track);
+
+  const playVibe = useCallback(async (vibe) => {
+    try {
+      if (!deviceTracksRef.current) {
+        const { tracks, permission } = await loadLibrary();
+        if (permission !== 'granted' || !tracks.length) {
+          toast('No songs on this device — add music files first.', true);
+          return;
+        }
+        deviceTracksRef.current = tracks;
+      }
+      const match = matchDevice(vibe, deviceTracksRef.current);
+      if (!match) {
+        toast(`"${vibe.track}" isn't on this device.`, true);
+        return;
+      }
+      if (!isEngineReady()) {
+        toast('Player is starting — try again in a moment.', true);
+        return;
+      }
+      const ok = await playQueue([match], 0);
+      if (ok) {
+        playingTrackRef.current = match.id;
+        setPlayingVibeId(vibe.id);
+        toast(`Playing "${match.title}" 🎵`);
+      } else {
+        toast('Could not play this file.', true);
+      }
+    } catch (e) {
+      toast(e?.message || 'Could not play.', true);
+    }
+  }, [toast]);
 
   const handleCreate = async () => {
     if (!newForm.artist.trim() || !newForm.track.trim()) {
@@ -457,19 +552,18 @@ export default function MusicVibes() {
     setCreating(true);
     setCreateErr(null);
     try {
-      const created = await apiSend('/music-vibes/', 'POST', {
+      const { offline } = await create({
         artist: newForm.artist.trim(),
         track: newForm.track.trim(),
         mood: newForm.mood.trim(),
         color: newForm.color,
       });
-      mutate((prev) => [created, ...(prev || [])]);
       setNewForm(EMPTY_FORM);
       setIsCreating(false);
-      toast('Track added ✓');
+      toast(offline ? 'Track saved on this device — will sync.' : 'Track added ✓');
     } catch (e) {
       console.error('[MusicVibes] create error:', e);
-      setCreateErr('Network error — check that Django is running and /api/music-vibes/ is reachable.');
+      setCreateErr(e?.message || 'Could not save track.');
     } finally {
       setCreating(false);
     }
@@ -495,32 +589,30 @@ export default function MusicVibes() {
     setSaving(true);
     setEditErr(null);
     try {
-      const updated = await apiSend(`/music-vibes/${id}/`, 'PATCH', {
+      const { offline } = await update(id, {
         artist: editForm.artist.trim(),
         track: editForm.track.trim(),
         mood: editForm.mood.trim(),
         color: editForm.color,
       });
-      mutate((prev) => (prev || []).map((v) => (v.id === id ? updated : v)));
       setEditId(null);
-      toast('Track updated ✓');
+      toast(offline ? 'Update saved on this device — will sync.' : 'Track updated ✓');
     } catch (e) {
       console.error('[MusicVibes] update error:', e);
-      setEditErr('Network error — check that Django is running.');
+      setEditErr(e?.message || 'Could not update track.');
     } finally {
       setSaving(false);
     }
-  }, [editForm, toast]);
+  }, [editForm, toast, update]);
 
   const performDelete = useCallback(async (id) => {
     setDeletingId(id);
     try {
-      await apiSend(`/music-vibes/${id}/`, 'DELETE');
-      mutate((prev) => (prev || []).filter((v) => v.id !== id));
-      toast('Track removed');
+      const { offline } = await remove(id);
+      toast(offline ? 'Removed on this device — will sync.' : 'Track removed');
     } catch (e) {
       console.error('[MusicVibes] delete error:', e);
-      toast('Network error.', true);
+      toast(e?.message || 'Could not delete track.', true);
     } finally {
       setDeletingId(null);
     }
@@ -540,6 +632,11 @@ export default function MusicVibes() {
   };
 
   const skeletons = useMemo(() => Array.from({ length: Math.max(4, cols * 3) }), [cols]);
+
+  const shownVibes = useMemo(
+    () => (favOnly ? vibes.filter((v) => favorites.has(v.id)) : vibes),
+    [vibes, favOnly, favorites],
+  );
 
   if (!fontsLoaded) {
     return (
@@ -665,17 +762,34 @@ export default function MusicVibes() {
             )}
 
             {}
+            <View style={st.favRow}>
+              <Pressable
+                onPress={() => setFavOnly((v) => !v)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: favOnly }}
+                style={[st.favChip, favOnly && st.favChipActive]}
+              >
+                <Feather name="heart" size={12} color={favOnly ? '#fff' : C.muted} />
+                <Text style={[st.favChipText, favOnly && st.favChipTextActive]}>
+                  Favorites{favorites.size > 0 ? ` (${favorites.size})` : ''}
+                </Text>
+              </Pressable>
+            </View>
+
+            {}
             <View style={[st.grid, { gap: GAP }]}>
               {loading ? (
                 skeletons.map((_, i) => <SkeletonCard key={i} width={cardWidth} />)
-              ) : vibes.length === 0 ? (
+              ) : shownVibes.length === 0 ? (
                 <View style={st.emptyState}>
                   <Text style={{ fontSize: 40, marginBottom: 14 }}>🎧</Text>
-                  <Text style={st.emptyTitle}>No tracks yet</Text>
-                  <Text style={st.emptyDesc}>Add your first song above.</Text>
+                  <Text style={st.emptyTitle}>{favOnly ? 'No favorites yet' : 'No tracks yet'}</Text>
+                  <Text style={st.emptyDesc}>
+                    {favOnly ? 'Tap the heart on any track to keep it here.' : 'Add your first song above.'}
+                  </Text>
                 </View>
               ) : (
-                vibes.map((v, i) => (
+                shownVibes.map((v, i) => (
                   <MusicCard
                     key={v.id}
                     vibe={v}
@@ -691,6 +805,10 @@ export default function MusicVibes() {
                     onCancelEdit={cancelEdit}
                     onSubmitEdit={handleUpdate}
                     onDelete={handleDelete}
+                    isFav={favorites.has(v.id)}
+                    isPlaying={playingVibeId === v.id}
+                    onToggleFav={toggleFav}
+                    onPlay={playVibe}
                   />
                 ))
               )}
@@ -791,6 +909,16 @@ const st = StyleSheet.create({
   mood: { fontFamily: F.sansItalic, fontSize: 13, color: C.muted },
   cardActions: { position: 'absolute', top: 12, right: 12, flexDirection: 'row', gap: 6 },
   inlineFields: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+
+  favRow: { flexDirection: 'row', marginBottom: 18 },
+  favChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
+    borderWidth: 1.5, borderColor: C.border, backgroundColor: C.surface,
+  },
+  favChipActive: { backgroundColor: C.danger, borderColor: C.danger },
+  favChipText: { fontFamily: F.syne, fontSize: 12.5, color: C.muted },
+  favChipTextActive: { color: '#fff' },
 
   skeleton: { height: 92, borderRadius: 18, backgroundColor: C.surfaceUp, borderWidth: 1.5, borderColor: C.border },
 

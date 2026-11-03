@@ -6,20 +6,17 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { enableLayoutAnimation } from '../utils/layoutAnimation';
-import useCachedResource from '../hooks/useCachedResource';
-import { apiSend } from '../api/http';
-import { fetchResource, TTL } from '../api/resources';
+import useOfflineCollection from '../hooks/useOfflineCollection';
+import { TTL } from '../api/resources';
+import { C as TC } from '../theme';
 
 enableLayoutAnimation();
 
-const C = {
-  white: '#ffffff', border: '#d8d4cc', greenLt: '#e4f1ea', green: '#2d6a4f', muted: '#eceae3',
-  dark: '#1a1a2e', soft: '#7a7567', danger: '#c0392b', dangerLt: '#fdecea', ph: '#bdb8ad',
-};
+const C = { ...TC, dangerLt: '#fdecea' };
 const softShadow = { shadowColor: '#1a1a2e', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 2 };
 
 const Spinner = ({ large, light = true }) => (
-  <ActivityIndicator size={large ? 'small' : 'small'} color={light ? '#fff' : C.green} style={large ? undefined : { transform: [{ scale: 0.75 }] }} />
+  <ActivityIndicator size={large ? 'large' : 'small'} color={light ? '#fff' : C.green} style={large ? undefined : { transform: [{ scale: 0.75 }] }} />
 );
 
 const Btn = ({ children, onPress, ghost, busy, disabled, small, style, type }) => (
@@ -61,16 +58,22 @@ export default function GoalsScreen() {
 
   const [error, setError] = useState('');
   const {
-    data: goals,
+    items: goals,
     loading,
     refreshing,
     errorText: loadError,
     refresh,
-    mutate,
-  } = useCachedResource('goals', () => fetchResource('goals'), {
+    isOnline,
+    pending,
+    create,
+    update,
+    remove,
+    runCustom,
+  } = useOfflineCollection('goals', {
     ttl: TTL.LIVE,
     initial: [],
-    errorMessage: 'Failed to load goals. Check your network connection.',
+    createPath: '/goals/',
+    itemPath: (id) => `/goals/${id}/`,
   });
   const [isCreating, setIsCreating] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -83,7 +86,7 @@ export default function GoalsScreen() {
   const anim = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
   const parseTimeline = (v) => parseInt(v, 10);
   const validTimeline = (n) => n && n > 0 && n <= 365;
-  const replaceGoal = (updated) => mutate((p) => (p || []).map((g) => (g.id === updated.id ? updated : g)));
+
 
   const handleCreate = async () => {
     const t = parseTimeline(newGoal.timeline);
@@ -91,9 +94,8 @@ export default function GoalsScreen() {
     if (!validTimeline(t)) { setError('Timeline must be between 1 and 365 days.'); return; }
     setSavingId('new'); setError('');
     try {
-      const created = await apiSend('/Goals/', 'POST', { title: newGoal.title.trim(), timeline: t });
+      await create({ title: newGoal.title.trim(), timeline: t });
       anim();
-      mutate((p) => [created, ...(p || [])]);
       setNewGoal({ title: '', timeline: '' });
       setIsCreating(false);
     } catch (e) { setError(e.message || 'Failed to create goal.'); }
@@ -103,8 +105,7 @@ export default function GoalsScreen() {
   const toggleGoalStatus = async (goal) => {
     setSavingId(goal.id); setError('');
     try {
-      const updated = await apiSend(`/Goals/${goal.id}/`, 'PATCH', { done: !goal.done });
-      replaceGoal(updated);
+      await update(goal.id, { done: !goal.done });
     } catch (e) { setError(e.message || 'Could not update status.'); }
     finally { setSavingId(null); }
   };
@@ -112,8 +113,16 @@ export default function GoalsScreen() {
   const toggleDay = async (goal, dayNumber) => {
     setTogglingDay(`${goal.id}-${dayNumber}`); setError('');
     try {
-      const updated = await apiSend(`/Goals/${goal.id}/days/${dayNumber}/toggle/`, 'PATCH');
-      replaceGoal(updated);
+      await runCustom(`/goals/${goal.id}/days/${dayNumber}/toggle/`, 'PATCH', null, {
+        updater: (prev) => (prev || []).map((g) => (
+          g.id !== goal.id ? g : {
+            ...g,
+            day_statuses: (g.day_statuses || []).map((d) => (
+              d.day_number === dayNumber ? { ...d, done: !d.done } : d
+            )),
+          }
+        )),
+      });
     } catch (e) { setError(e.message || 'Could not update that day.'); }
     finally { setTogglingDay(null); }
   };
@@ -131,11 +140,10 @@ export default function GoalsScreen() {
     if (!validTimeline(t)) { setError('Timeline must be between 1 and 365 days.'); return; }
     setSavingId(goal.id); setError('');
     try {
-      const updated = await apiSend(`/Goals/${goal.id}/`, 'PATCH', {
+      await update(goal.id, {
         title: editGoal.title.trim(),
         timeline: t,
       });
-      replaceGoal(updated);
       anim();
       setEditingId(null);
     } catch (e) { setError(e.message || 'Failed to update goal.'); }
@@ -145,9 +153,8 @@ export default function GoalsScreen() {
   const deleteNow = async (id) => {
     setSavingId(id); setError('');
     try {
-      await apiSend(`/Goals/${id}/`, 'DELETE');
       anim();
-      mutate((p) => (p || []).filter((g) => g.id !== id));
+      await remove(id);
     } catch (e) { setError(e.message || 'Could not delete goal.'); }
     finally { setSavingId(null); }
   };
@@ -163,7 +170,7 @@ export default function GoalsScreen() {
   }, [goals]);
 
   return (
-    <SafeAreaView style={s.page} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={s.page} edges={['top', 'left', 'right', 'bottom']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           contentContainerStyle={{ paddingBottom: 80 }} keyboardShouldPersistTaps="handled"
@@ -216,7 +223,10 @@ export default function GoalsScreen() {
 
             {!loading && goals.length > 0 && (
               <>
-                <Text style={s.summary}>{summary.done} of {summary.total} goals complete</Text>
+                <Text style={s.summary}>
+                  {summary.done} of {summary.total} goals complete
+                  {!isOnline ? ' · offline — saved on this device' : pending > 0 ? ` · ${pending} to sync` : ''}
+                </Text>
                 <View style={{ gap: 14 }}>
                   {goals.map((g) => {
                     const editingThis = editingId === g.id;

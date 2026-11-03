@@ -13,11 +13,8 @@ import {
   Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold,
 } from '@expo-google-fonts/inter';
 
-
-const API_BASE = process.env.EXPO_PUBLIC_API_URL;
-import useCachedResource from '../hooks/useCachedResource';
-import { apiSend } from '../api/http';
-import { fetchResource, TTL } from '../api/resources';
+import useOfflineCollection from '../hooks/useOfflineCollection';
+import { TTL } from '../api/resources';
 
 const C = {
   bg: '#f6f5f0',
@@ -374,15 +371,20 @@ export default function ChronosTaskFlow() {
 
   const [apiError, setApiError] = useState('');
   const {
-    data: allTasks,
+    items: allTasks,
     loading,
     errorText: loadError,
     refresh,
-    mutate,
-  } = useCachedResource('tasks', () => fetchResource('tasks'), {
+    isOnline,
+    pending,
+    create,
+    update,
+    remove,
+  } = useOfflineCollection('tasks', {
     ttl: TTL.LIVE,
     initial: [],
-    errorMessage: 'Failed to load tasks. Check your connection.',
+    createPath: '/tasks/',
+    itemPath: (id) => `/tasks/${id}/`,
   });
   const [savingId, setSavingId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -406,13 +408,13 @@ export default function ChronosTaskFlow() {
     setSubmitting(true);
     setApiError('');
     try {
-      const created = await apiSend('/tasks/', 'POST', {
+      const { offline } = await create({
         text: taskInput.trim(),
         dueDate: dateInput,
         completed: false,
       });
-      mutate((prev) => [created, ...(prev || [])]);
       setTaskInput('');
+      if (offline) setApiError('');
     } catch (err) {
       setApiError(err.message || 'Failed to create task.');
     } finally {
@@ -424,56 +426,58 @@ export default function ChronosTaskFlow() {
     setSavingId(task.id);
     setApiError('');
     try {
-      const updated = await apiSend(`/tasks/${task.id}/`, 'PATCH', { completed: !task.completed });
-      mutate((prev) => (prev || []).map((t) => (t.id === task.id ? updated : t)));
+      await update(task.id, { completed: !task.completed });
     } catch (err) {
       setApiError(err.message || 'Could not update task.');
     } finally {
       setSavingId(null);
     }
-  }, []);
+  }, [update]);
 
   const editTask = useCallback(async (task, newText) => {
     if (!newText.trim()) return;
     setSavingId(task.id);
     setApiError('');
     try {
-      const updated = await apiSend(`/tasks/${task.id}/`, 'PUT', {
+      await update(task.id, {
         text: newText.trim(),
         dueDate: task.dueDate,
         completed: task.completed,
-      });
-      mutate((prev) => (prev || []).map((t) => (t.id === task.id ? updated : t)));
+      }, { method: 'PUT' });
     } catch (err) {
       setApiError(err.message || 'Failed to update task.');
     } finally {
       setSavingId(null);
     }
-  }, []);
+  }, [update]);
 
   const deleteTask = useCallback(async (taskId) => {
     setSavingId(taskId);
     setApiError('');
     try {
-      await apiSend(`/tasks/${taskId}/`, 'DELETE');
-      mutate((prev) => (prev || []).filter((t) => t.id !== taskId));
+      await remove(taskId);
     } catch (err) {
       setApiError(err.message || 'Could not delete task.');
     } finally {
       setSavingId(null);
     }
-  }, []);
+  }, [remove]);
 
   const performDeleteDay = useCallback(async (dateStr, dayTasks) => {
-    mutate((prev) => (prev || []).filter((t) => t.dueDate !== dateStr));
-    try {
-      await Promise.all(dayTasks.map((t) => apiSend(`/tasks/${t.id}/`, 'DELETE')));
-    } catch (err) {
-      console.log(err);
-      setApiError('Day deletion partially failed. Refreshing...');
+    setApiError('');
+    let failed = 0;
+    for (const t of dayTasks) {
+      try {
+        await remove(t.id);
+      } catch {
+        failed += 1;
+      }
+    }
+    if (failed > 0) {
+      setApiError('Some deletions need review — pull to refresh to confirm.');
       refresh();
     }
-  }, [mutate, refresh]);
+  }, [remove, refresh]);
 
   const deleteDay = useCallback((dateStr) => {
     const dayTasks = allTasks.filter((t) => t.dueDate === dateStr);

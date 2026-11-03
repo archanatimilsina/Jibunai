@@ -16,8 +16,8 @@ export const SECRET_CODE_REGEX = /^.{4,8}$/;
 
 export function validateSecretCode(value) {
   if (value == null) return 'Secret code is required.';
-  const code = String(value);
-  if (!code.trim()) return 'Secret code is required.';
+  const code = String(value).trim();
+  if (!code) return 'Secret code is required.';
   if (code.length < SECRET_CODE_MIN || code.length > SECRET_CODE_MAX) {
     return `Secret code must be between ${SECRET_CODE_MIN} and ${SECRET_CODE_MAX} characters.`;
   }
@@ -47,7 +47,9 @@ export function validateDateOfBirth(value) {
   const today = new Date();
   if (isNaN(dob.getTime())) return 'Invalid date of birth.';
   if (dob > today) return 'Date of birth cannot be in the future.';
-  const age = today.getFullYear() - dob.getFullYear();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age -= 1;
   if (age < 13) return 'You must be at least 13 years old.';
   return null;
 }

@@ -12,14 +12,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import useCachedResource from '../hooks/useCachedResource';
 import { invalidatePrefix } from '../api/cache';
 import { apiGet, apiSend, apiUpload } from '../api/http';
+import { apiSendOffline, isRetryableError } from '../api/offlineSend';
+import { enqueueOp, mergeIntoQueuedCreate, mergeUploadIntoQueuedCreate, removeOpsForLocalId, subscribeOutbox } from '../api/outbox';
+import { stageFile } from '../api/fileQueue';
+import { isLocalId } from '../hooks/useOfflineCollection';
+import { useOnlineStatus } from '../api/connectivity';
 import { TTL } from '../api/resources';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL;
-const BASE = `${API_BASE}/api`;
-const POSTS = `${BASE}/blog/posts/`;
-const CATEGORIES = `${BASE}/blog/categories/`;
-const COMMENTS = `${BASE}/blog/comments/`;
-const IMAGES = `${BASE}/blog/images/`;
+const POSTS = '/blog/posts/';
+const COMMENTS = '/blog/comments/';
+const IMAGES = '/blog/images/';
 const LIKED_KEY = 'blog:liked-ids';
 const DEFAULT_FILTER_SIGNATURE = 'all|all||newest';
 
@@ -33,14 +35,6 @@ const shadow = {
   shadowOffset: { width: 0, height: 6 }, elevation: 3,
 };
 
-const parseError = async (res) => {
-  try {
-    const d = await res.json();
-    if (d && typeof d === 'object')
-      return Object.entries(d).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' · ');
-    return String(d);
-  } catch { return `Server error (${res.status})`; }
-};
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '');
 const fmtRelative = (iso) => {
   if (!iso) return '';
@@ -72,7 +66,7 @@ function inline(text, prefix) {
     if (m[2] !== undefined) out.push(<Text key={key} style={md.bold}>{m[2]}</Text>);
     else if (m[3] !== undefined) out.push(<Text key={key} style={md.italic}>{m[3]}</Text>);
     else if (m[4] !== undefined) out.push(<Text key={key} style={md.code}>{m[4]}</Text>);
-    else out.push(<Text key={key} style={md.link} onPress={() => Linking.openURL(m[6])}>{m[5]}</Text>);
+    else out.push(<Text key={key} style={md.link} onPress={() => { Linking.openURL(m[6]).catch(() => {}); }}>{m[5]}</Text>);
     last = m.index + m[0].length;
   }
   if (last < text.length) out.push(text.slice(last));
@@ -254,6 +248,10 @@ export default function BlogScreen({ onBack }) {
 
   const isEditing = mode === 'new' || mode === 'edit';
   const coverUri = coverFile?.uri || (!removeCover && post?.cover_image_url) || null;
+  const isOnline = useOnlineStatus();
+  // Local temp ids for posts created offline; later saves fold into the queued op.
+  const makeLocalId = () => `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const isNewPost = mode === 'new' || (activeId != null && isLocalId(activeId));
 
   const toast = useCallback((msg, err = false) => {
     const id = Date.now() + Math.random();
@@ -279,9 +277,7 @@ export default function BlogScreen({ onBack }) {
   }, [statusFilter, categoryFilter, query, sort]);
 
   const fetchBlogPage = useCallback(async (pageNum = 1) => {
-    const res = await fetch(`${POSTS}?${buildQuery(pageNum)}`);
-    if (!res.ok) throw new Error(`Server returned ${res.status}`);
-    const d = await res.json();
+    const d = await apiGet(`${POSTS}?${buildQuery(pageNum)}`);
     const results = Array.isArray(d) ? d : d.results || [];
     return { results, total: Array.isArray(d) ? results.length : (d.count ?? results.length) };
   }, [buildQuery]);
@@ -366,19 +362,18 @@ export default function BlogScreen({ onBack }) {
     resetEditor();
     setActiveId(item.id); setPost(item); setForm(postToForm(item)); setComments([]);
     setTab(asEdit ? 'write' : 'preview'); setMode(asEdit ? 'edit' : 'view');
+    // Local (offline-created) posts live only in the cache — nothing to fetch.
+    if (isLocalId(item.id)) return;
     try {
-      const res = await fetch(`${POSTS}${item.id}/`);
-      if (res.ok) { const d = await res.json(); setPost(d); setComments(d.comments || []); setForm(postToForm(d)); }
+      const d = await apiGet(`${POSTS}${item.id}/`);
+      setPost(d); setComments(d.comments || []); setForm(postToForm(d));
     } catch { }
     if (!viewedRef.current.has(item.id)) {
       viewedRef.current.add(item.id);
       try {
-        const res = await fetch(`${POSTS}${item.id}/view/`, { method: 'POST' });
-        if (res.ok) {
-          const d = await res.json();
-          patchPosts((prev) => prev.map((p) => (p.id === item.id ? { ...p, views: d.views } : p)));
-          setPost((prev) => (prev && prev.id === item.id ? { ...prev, views: d.views } : prev));
-        }
+        const d = await apiSend(`${POSTS}${item.id}/view/`, 'POST');
+        patchPosts((prev) => prev.map((p) => (p.id === item.id ? { ...p, views: d.views } : p)));
+        setPost((prev) => (prev && prev.id === item.id ? { ...prev, views: d.views } : prev));
       } catch { }
     }
   }, []);
@@ -390,6 +385,28 @@ export default function BlogScreen({ onBack }) {
     ]);
     else closeEditor();
   };
+
+  // After the outbox drains, pull server truth into the list, stats, and the
+  // open post (view mode only — never clobber an editor with unsaved input).
+  const activeRef = useRef({ activeId: null, mode: null });
+  activeRef.current = { activeId, mode };
+  const blogPendingRef = useRef(0);
+  useEffect(() => subscribeOutbox((ops) => {
+    const n = ops.filter((o) => o.resourceKey === 'blogPosts' || o.resourceKey === 'blogComments').length;
+    const prev = blogPendingRef.current;
+    blogPendingRef.current = n;
+    if (prev > 0 && n === 0) {
+      refreshList(); refreshStats();
+      const { activeId: id, mode: m } = activeRef.current;
+      if (id && !isLocalId(id) && m === 'view') {
+        apiGet(`${POSTS}${id}/`).then((d) => {
+          if (activeRef.current.activeId !== id) return;
+          setPost(d); setComments(d.comments || []); setForm(postToForm(d));
+          patchPosts((list) => list.map((p) => (p.id === id ? { ...p, ...d } : p)));
+        }).catch(() => {});
+      }
+    }
+  }), [refreshList, refreshStats]);
 
   const updateField = (k, v) => { setForm((p) => ({ ...p, [k]: v })); setDirty(true); };
 
@@ -424,19 +441,18 @@ export default function BlogScreen({ onBack }) {
   };
 
   const insertImage = async () => {
+    if (!isOnline) { toast('You are offline — connect to add images to your story.', true); return; }
     const f = await pickImage();
     if (!f) return;
     setUploadingImage(true);
     try {
       const fd = new FormData();
       fd.append('image', f);
-      const res = await fetch(IMAGES, { method: 'POST', body: fd });
-      if (!res.ok) { toast(await parseError(res), true); return; }
-      const { url } = await res.json();
+      const { url } = await apiUpload(IMAGES, fd);
       const alt = f.name.replace(/\.[^.]+$/, '') || 'image';
       insertAtCursor(`\n\n![${alt}](${url})\n\n`);
       toast('Image added to your story.');
-    } catch { toast('Network error — could not upload image.', true); }
+    } catch (err) { toast(err?.message || 'Network error — could not upload image.', true); }
     finally { setUploadingImage(false); }
   };
 
@@ -466,29 +482,95 @@ export default function BlogScreen({ onBack }) {
     setSaving(true); setSaveError('');
     try {
       const payload = buildPayload();
-      const isNew = mode === 'new';
-      const url = isNew ? POSTS : `${POSTS}${activeId}/`;
-      const method = isNew ? 'POST' : 'PATCH';
-      let res;
-      if (payload instanceof FormData) {
-        if (overrides.status) payload.set('status', overrides.status);
-        res = await fetch(url, { method, body: payload });
-      } else {
-        res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, ...overrides }) });
-      }
-      if (!res.ok) { setSaveError(await parseError(res)); return null; }
-      const saved = await res.json();
+      const path = isNewPost ? POSTS : `${POSTS}${activeId}/`;
+      const method = isNewPost ? 'POST' : 'PATCH';
+      const saved = payload instanceof FormData
+        ? await apiUpload(path, (() => { if (overrides.status) payload.append('status', overrides.status); return payload; })(), { method })
+        : await apiSend(path, method, { ...payload, ...overrides });
       setPost(saved); setActiveId(saved.id); setForm(postToForm(saved)); setComments(saved.comments || []);
       setDirty(false); setCoverFile(null); setRemoveCover(false); setMode('edit');
       patchPosts((prev) => (prev.some((p) => p.id === saved.id)
         ? prev.map((p) => (p.id === saved.id ? { ...p, ...saved } : p))
         : [saved, ...prev]));
-      toast(isNew ? 'Post created' : 'Post saved');
+      toast(isNewPost ? 'Post created' : 'Post saved');
       refreshStats();
       invalidatePrefix('blogPosts');
       return saved;
-    } catch { setSaveError('Network error — changes were not saved.'); return null; }
+    } catch (err) {
+      if (!isRetryableError(err)) { setSaveError(err?.message || 'Network error — changes were not saved.'); return null; }
+      try {
+        return await savePostOffline(overrides);
+      } catch (e2) { setSaveError(e2?.message || 'Could not save offline.'); return null; }
+    }
     finally { setSaving(false); }
+  };
+
+  /** Offline save: stage the cover, queue the op, paint the optimistic post. */
+  const savePostOffline = async (overrides = {}) => {
+    const status = overrides.status ?? form.status;
+    const fields = {
+      title: form.title,
+      excerpt: form.excerpt,
+      content: form.content,
+      author: form.author,
+      status,
+      is_featured: form.isFeatured,
+      tags: JSON.stringify(parseTags(form.tags)),
+      ...(form.category ? { category: String(form.category) } : {}),
+    };
+    if (removeCover && !coverFile) fields.remove_cover = 'true';
+    let cover = null;
+    if (coverFile) {
+      const stagedUri = await stageFile(coverFile.uri, coverFile.name);
+      cover = { uri: stagedUri, name: coverFile.name, type: coverFile.type, field: 'cover_image' };
+    }
+    const upload = cover
+      ? { field: 'cover_image', fileUri: cover.uri, fileName: cover.name, mimeType: cover.type }
+      : null;
+    const optimisticFrom = (base) => ({
+      ...base,
+      title: form.title, excerpt: form.excerpt, content: form.content, author: form.author,
+      status, is_featured: form.isFeatured, tags: parseTags(form.tags),
+      category: form.category ? Number(form.category) : null,
+      cover_image_url: cover ? cover.uri : (removeCover ? null : base?.cover_image_url || null),
+      _pending: true, updated_at: new Date().toISOString(),
+    });
+
+    let result;
+    if (isNewPost && mode === 'new') {
+      const localId = makeLocalId();
+      const optimistic = {
+        ...optimisticFrom(null),
+        id: localId, views: 0, likes: 0, comment_count: 0,
+        created_at: new Date().toISOString(),
+      };
+      setPost(optimistic); setActiveId(localId); setForm(postToForm({ ...optimistic, category: optimistic.category }));
+      setComments([]); setMode('edit');
+      patchPosts((prev) => [optimistic, ...prev]);
+      await enqueueOp({ resourceKey: 'blogPosts', method: 'POST', path: POSTS, body: fields, localId, upload });
+      result = optimistic;
+    } else if (isNewPost) {
+      // Still-unsynced local post: fold the edit into its queued create.
+      const localId = activeId;
+      await mergeIntoQueuedCreate(localId, fields);
+      if (upload) await mergeUploadIntoQueuedCreate(localId, upload);
+      const optimistic = optimisticFrom(post);
+      setPost((prev) => (prev && prev.id === localId ? { ...prev, ...optimistic } : prev));
+      setForm((prev) => ({ ...prev, status }));
+      patchPosts((prev) => prev.map((p) => (p.id === localId ? { ...p, ...optimistic } : p)));
+      result = { ...(post || {}), ...optimistic };
+    } else {
+      const id = activeId;
+      const optimistic = optimisticFrom(post);
+      setPost((prev) => (prev && prev.id === id ? { ...prev, ...optimistic } : prev));
+      setForm((prev) => ({ ...prev, status }));
+      patchPosts((prev) => prev.map((p) => (p.id === id ? { ...p, ...optimistic } : p)));
+      await enqueueOp({ resourceKey: 'blogPosts', method: 'PATCH', path: `${POSTS}${id}/`, body: fields, targetId: id, upload });
+      result = { ...(post || {}), ...optimistic };
+    }
+    setDirty(false); setCoverFile(null); setRemoveCover(false);
+    toast('Saved on this device — will sync when online.');
+    return result;
   };
 
   const togglePublish = async () => {
@@ -499,18 +581,25 @@ export default function BlogScreen({ onBack }) {
 
   const deletePost = async (id) => {
     setDeleting(true);
-    try {
-      const res = await fetch(`${POSTS}${id}/`, { method: 'DELETE' });
-      if (!res.ok && res.status !== 204 && res.status !== 404) { toast('Delete failed. Please try again.', true); return; }
+    const cleanup = (wasOffline) => {
       patchPosts((prev) => prev.filter((p) => p.id !== id));
       mutateList((entry) => (entry
         ? { ...entry, results: (entry.results || []).filter((p) => p.id !== id), total: Math.max(0, (entry.total || 1) - 1) }
         : entry));
       refreshStats(); setConfirmDelete(null);
-      invalidatePrefix('blogPosts');
       if (activeId === id) closeEditor();
-      toast('Post deleted');
-    } catch { toast('Network error — could not delete.', true); }
+      toast(wasOffline ? 'Deleted on this device — will sync.' : 'Post deleted');
+    };
+    try {
+      const { offline } = await apiSendOffline(`${POSTS}${id}/`, 'DELETE', null, { resourceKey: 'blogPosts', targetId: id });
+      cleanup(offline);
+      if (!offline) invalidatePrefix('blogPosts');
+    } catch (err) {
+      // Already gone server-side counts as deleted.
+      if (err?.status === 404) {
+        cleanup(false);
+      } else toast(err?.message || 'Network error — could not delete.', true);
+    }
     finally { setDeleting(false); }
   };
 
@@ -523,35 +612,57 @@ export default function BlogScreen({ onBack }) {
     patchPosts((prev) => prev.map((p) => (p.id === item.id ? { ...p, likes: Math.max(0, (p.likes || 0) + d) } : p)));
     setPost((prev) => (prev && prev.id === item.id ? { ...prev, likes: Math.max(0, (prev.likes || 0) + d) } : prev));
     try {
-      await fetch(`${POSTS}${item.id}/like/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ like: !was }) });
-    } catch { toast('Could not sync like.', true); }
+      await apiSend(`${POSTS}${item.id}/like/`, 'POST', { like: !was });
+    } catch (err) {
+      if (isRetryableError(err)) {
+        await enqueueOp({ resourceKey: 'blogPosts', method: 'POST', path: `${POSTS}${item.id}/like/`, body: { like: !was } }).catch(() => {});
+      } else toast('Could not sync like.', true);
+    }
   };
 
   const addComment = async () => {
     if (!commentBody.trim() || !post) return;
     setPostingComment(true);
+    const body = { post: post.id, author_name: commentName.trim() || 'Anonymous', body: commentBody.trim() };
     try {
-      const res = await fetch(COMMENTS, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ post: post.id, author_name: commentName.trim() || 'Anonymous', body: commentBody.trim() }),
-      });
-      if (!res.ok) { toast(await parseError(res), true); return; }
-      const created = await res.json();
+      const created = await apiSend(COMMENTS, 'POST', body);
       setComments((prev) => [...prev, created]); setCommentBody('');
       patchPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, comment_count: (p.comment_count || 0) + 1 } : p)));
       toast('Comment added');
-    } catch { toast('Network error — comment not saved.', true); }
-    finally { setPostingComment(false); }
+    } catch (err) {
+      if (!isRetryableError(err)) {
+        toast(err?.message || 'Network error — comment not saved.', true);
+      } else if (isLocalId(post.id)) {
+        toast('Connect once so the post exists, then comment.', true);
+      } else {
+        const localId = makeLocalId();
+        const optimistic = { ...body, id: localId, _local: true, created_at: new Date().toISOString() };
+        setComments((prev) => [...prev, optimistic]); setCommentBody('');
+        patchPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, comment_count: (p.comment_count || 0) + 1 } : p)));
+        await enqueueOp({ resourceKey: 'blogComments', method: 'POST', path: COMMENTS, body, localId }).catch(() => {});
+        toast('Comment saved on this device — will sync.');
+      }
+    } finally { setPostingComment(false); }
   };
 
   const deleteComment = async (id) => {
+    const snapshot = comments;
+    setComments((prev) => prev.filter((c) => c.id !== id));
     try {
-      const res = await fetch(`${COMMENTS}${id}/`, { method: 'DELETE' });
-      if (res.ok || res.status === 204 || res.status === 404) {
-        setComments((prev) => prev.filter((c) => c.id !== id));
+      const { offline } = await apiSendOffline(`${COMMENTS}${id}/`, 'DELETE', null, { resourceKey: 'blogComments', targetId: id });
+      patchPosts((prev) => prev.map((p) => (p.id === post?.id ? { ...p, comment_count: Math.max(0, (p.comment_count || 0) - 1) } : p)));
+      if (offline) toast('Comment removed on this device — will sync.');
+    } catch (err) {
+      if (isLocalId(id)) {
+        await removeOpsForLocalId(id).catch(() => {});
         patchPosts((prev) => prev.map((p) => (p.id === post?.id ? { ...p, comment_count: Math.max(0, (p.comment_count || 0) - 1) } : p)));
+      } else if (err?.status === 404) {
+        setComments((prev) => prev.filter((c) => c.id !== id));
+      } else {
+        setComments(snapshot);
+        toast(err?.message || 'Could not delete comment.', true);
       }
-    } catch { toast('Could not delete comment.', true); }
+    }
   };
 
   const catOptions = [{ value: 'all', label: 'All categories' }, ...categories.map((c) => ({ value: c.id, label: c.name }))];

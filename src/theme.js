@@ -25,7 +25,7 @@ export const shadow = (level = 1) => ({
   elevation: level * 2 + 1,
 });
 
-export const mono = Platform.select({ ios: 'Menlo', android: 'monospace' });
+export const mono = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' });
 
 export const F = {
   sans: 'DMSans_400Regular',

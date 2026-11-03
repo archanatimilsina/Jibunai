@@ -8,6 +8,11 @@ import {
 import Svg, {
   Path, Circle, Defs, Pattern, Rect,
 } from 'react-native-svg';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+
+const STORAGE_KEY = 'gesturedraw:strokes';
+const MAX_STORED_STROKES = 50;
 
 
 const COLORS = [
@@ -154,11 +159,42 @@ export default function GestureDraw() {
   const scheduleRender = useCallback(() => {
     const d = data.current;
     if (d.raf) return;
+    if (typeof requestAnimationFrame === 'undefined') { force(); return; }
     d.raf = requestAnimationFrame(() => { d.raf = null; force(); });
   }, []);
 
   useEffect(() => () => {
     if (data.current.raf) cancelAnimationFrame(data.current.raf);
+  }, []);
+
+  // Strokes live in a ref (no re-render per touch) — persist them so a
+  // navigation away doesn't wipe the drawing. Capped to stay small.
+  const persistStrokes = useCallback(() => {
+    try {
+      const all = data.current.allStrokes.slice(-MAX_STORED_STROKES);
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(all)).catch(() => {});
+    } catch { /* storage full or unavailable — drawing still works in memory */ }
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    AsyncStorage.getItem(STORAGE_KEY)
+      .then((raw) => {
+        if (!alive || !raw) return;
+        try {
+          const arr = JSON.parse(raw);
+          if (!Array.isArray(arr)) return;
+          const d = data.current;
+          d.allStrokes = arr.slice(-MAX_STORED_STROKES);
+          d.totalPoints = d.allStrokes.reduce((n, s) => n + (s.pts?.length || 0), 0);
+          const last = d.allStrokes[d.allStrokes.length - 1];
+          setLastStrokePts(last ? last.pts : []);
+          setShowHint(d.allStrokes.length === 0);
+          force();
+        } catch { /* corrupt copy — start fresh */ }
+      })
+      .catch(() => {});
+    return () => { alive = false; };
   }, []);
 
   const finishStroke = useCallback(() => {
@@ -173,8 +209,9 @@ export default function GestureDraw() {
     }
     d.currentPoints = [];
     setScrollOn(true);
+    persistStrokes();
     force();
-  }, []);
+  }, [persistStrokes]);
 
   const panResponder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -212,6 +249,7 @@ export default function GestureDraw() {
     d.drawing = false;
     setShowHint(true);
     setLastStrokePts([]);
+    persistStrokes();
     force();
   };
 
@@ -223,6 +261,7 @@ export default function GestureDraw() {
     const prev = d.allStrokes[d.allStrokes.length - 1];
     setLastStrokePts(prev ? prev.pts : []);
     if (d.allStrokes.length === 0) setShowHint(true);
+    persistStrokes();
     force();
   };
 

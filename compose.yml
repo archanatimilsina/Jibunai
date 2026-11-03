@@ -1,3 +1,5 @@
+# Legacy: nothing in the app uses Mongo (the API runs on Supabase Postgres).
+# Kept so `npm run mongo` still works for anyone experimenting locally.
 services:
   mongo:
     image: mongo:6

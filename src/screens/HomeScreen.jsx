@@ -11,10 +11,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, mono } from '../theme';
 import TodaysTasks from '../components/TodaysTasks';
+import { useSystems } from '../systems/prefs';
 
 export default function HomeScreen({ onNavigate }) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const { isEnabled } = useSystems();
 
   const compact = width < 380;
   const wide = width >= 700;
@@ -33,19 +35,18 @@ export default function HomeScreen({ onNavigate }) {
           },
         ]}
       >
-        {}
         <View style={[st.hero, wide && st.heroWide]}>
           <Image
             source={require('../../assets/jibunai-logo.png')}
-            style={[st.heroLogo, compact && { height: compact ? 116 : 148 }]}
+            style={[st.heroLogo, compact && { height: 116 }]}
             resizeMode="contain"
           />
           <Text style={[st.brand, compact && { fontSize: 34 }]}>Jibunai</Text>
           <Text style={st.tagline}>yours, quietly</Text>
         </View>
 
-        {/* what is still waiting to be done */}
-        <TodaysTasks onNavigate={onNavigate} />
+        {/* what is still waiting to be done (only when tasks are enabled) */}
+        {isEnabled('tasks') && <TodaysTasks onNavigate={onNavigate} />}
 
         <Text style={st.foot}>Jibunai · made for one</Text>
       </ScrollView>

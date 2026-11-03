@@ -22,6 +22,11 @@ export const ROUTE_META = [
   { key: 'hobbies', label: 'Hobbies', caption: 'What you build', group: 'Life', icon: 'heart' },
   { key: 'wishlist', label: 'Wishlist', caption: 'Things to get', group: 'Life', icon: 'star' },
   { key: 'watchlist', label: 'Watchlist', caption: 'Shows and films', group: 'Life', icon: 'tv' },
+
+  { key: 'alarm', label: 'Alarm', caption: 'Alarms & reminders', group: 'Everyday', icon: 'bell' },
+  { key: 'datekeeper', label: 'Date Keeper', caption: 'Never miss a date', group: 'Everyday', icon: 'calendar' },
+  { key: 'player', label: 'Player', caption: 'All your songs', group: 'Life', icon: 'play' },
+  { key: 'settings', label: 'Settings', caption: 'Systems & preferences', group: 'Start', icon: 'settings' },
 ];
 
 export const GROUPS = ['Start', 'Everyday', 'Write', 'Life'];

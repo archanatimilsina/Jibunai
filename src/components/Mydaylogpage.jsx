@@ -7,6 +7,9 @@ import {
   KeyboardAvoidingView, RefreshControl, ActivityIndicator, Easing,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFonts } from 'expo-font';
 import {
@@ -20,9 +23,8 @@ import {
 import { DMMono_400Regular, DMMono_500Medium } from '@expo-google-fonts/dm-mono';
 
 
-import useCachedResource from '../hooks/useCachedResource';
-import { apiSend, apiUpload } from '../api/http';
-import { fetchResource, TTL } from '../api/resources';
+import useOfflineCollection from '../hooks/useOfflineCollection';
+import { TTL } from '../api/resources';
 
 const T = {
   pageBg: '#f5f0e8',
@@ -81,6 +83,9 @@ const fromISODate = (s) => {
 };
 
 const EMPTY_FORM = { title: '', date: todayISO(), mood: 'Neutral', remote_url: '', source: 'remote' };
+
+const VIEW_KEY = 'myday:view';
+const EXTRAS_KEY = 'myday:extras:v1';
 
 const fmtDate = (str) =>
   new Date(`${str}T00:00:00Z`).toLocaleDateString(undefined, {
@@ -160,7 +165,7 @@ function OBtn({ label, color, onPress }) {
 }
 
 
-function PolaroidCard({ entry, index, active, onToggle, onEdit, onDelete }) {
+function PolaroidCard({ entry, index, active, onToggle, onEdit, onDelete, onShare, extra }) {
   const tilt = useMemo(() => tiltFor(entry.id), [entry.id]);
   const tapeLeft = idNumber(entry.id) % 2 === 0;
   const mood = MOOD_PALETTE[entry.mood] || MOOD_PALETTE.Neutral;
@@ -200,6 +205,7 @@ function PolaroidCard({ entry, index, active, onToggle, onEdit, onDelete }) {
                 {active && (
                   <View style={st.photoOverlay}>
                     <OBtn label="Edit" color={T.green} onPress={() => onEdit(entry)} />
+                    <OBtn label="Share" color={T.green} onPress={() => onShare(entry)} />
                     <OBtn label="Delete" color={T.red} onPress={() => onDelete(entry)} />
                   </View>
                 )}
@@ -208,6 +214,7 @@ function PolaroidCard({ entry, index, active, onToggle, onEdit, onDelete }) {
               <View style={st.noPhoto}>
                 <View style={st.noPhotoActions}>
                   <OBtn label="Edit" color={T.green} onPress={() => onEdit(entry)} />
+                  <OBtn label="Share" color={T.green} onPress={() => onShare(entry)} />
                   <OBtn label="Delete" color={T.red} onPress={() => onDelete(entry)} />
                 </View>
               </View>
@@ -219,6 +226,12 @@ function PolaroidCard({ entry, index, active, onToggle, onEdit, onDelete }) {
                 <Text style={[st.moodTagText, { color: mood.fg }]}>{(entry.mood || '').toUpperCase()}</Text>
               </View>
               <Text style={st.cardTitle}>{entry.title}</Text>
+              {!!extra?.highlight?.trim() && (
+                <Text style={st.cardHighlight} numberOfLines={3}>✦ {extra.highlight.trim()}</Text>
+              )}
+              {!!extra?.gratitude?.trim() && (
+                <Text style={st.cardGrateful} numberOfLines={2}>Grateful for {extra.gratitude.trim()}</Text>
+              )}
             </View>
           </View>
         </Pressable>
@@ -230,6 +243,7 @@ function PolaroidCard({ entry, index, active, onToggle, onEdit, onDelete }) {
 
 function EntryModal({
   visible, wide, isEditing, formData, setFormData, pickedFile, onPick, submitting, onClose, onSubmit,
+  extra, onExtraChange,
 }) {
   const [showDate, setShowDate] = useState(false);
   useEffect(() => { if (!visible) setShowDate(false); }, [visible]);
@@ -255,9 +269,9 @@ function EntryModal({
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Pressable style={[st.overlay, !wide && { justifyContent: 'flex-end', padding: 0 }]} onPress={onClose}>
-          <Pressable
-            onPress={() => {}}
+        <View style={[st.overlay, !wide && { justifyContent: 'flex-end', padding: 0 }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close dialog" />
+          <View
             style={[st.modal, wide ? st.modalWide : st.modalSheet]}
             accessibilityViewIsModal
           >
@@ -273,7 +287,6 @@ function EntryModal({
             >
               <Text style={st.modalTitle}>{isEditing ? 'Edit Day Stamp' : 'How was your day?'}</Text>
 
-              {}
               <View style={st.field}>
                 <Text style={st.fLabel}>TITLE *</Text>
                 <TextInput
@@ -287,7 +300,6 @@ function EntryModal({
                 />
               </View>
 
-              {}
               <View style={st.field}>
                 <Text style={st.fLabel}>DATE *</Text>
                 <Pressable
@@ -340,6 +352,33 @@ function EntryModal({
 
               {}
               <View style={st.field}>
+                <Text style={st.fLabel}>HIGHLIGHT OF THE DAY</Text>
+                <TextInput
+                  value={extra.highlight || ''}
+                  onChangeText={(v) => onExtraChange({ highlight: v })}
+                  placeholder="One moment worth remembering…"
+                  placeholderTextColor={T.placeholder}
+                  style={[st.fInput, st.fInputMulti]}
+                  multiline
+                  accessibilityLabel="Highlight of the day"
+                />
+              </View>
+
+              <View style={st.field}>
+                <Text style={st.fLabel}>GRATEFUL FOR</Text>
+                <TextInput
+                  value={extra.gratitude || ''}
+                  onChangeText={(v) => onExtraChange({ gratitude: v })}
+                  placeholder="Something you're thankful for…"
+                  placeholderTextColor={T.placeholder}
+                  style={[st.fInput, st.fInputMulti]}
+                  multiline
+                  accessibilityLabel="Grateful for"
+                />
+              </View>
+
+              {}
+              <View style={st.field}>
                 <Text style={st.fLabel}>IMAGE</Text>
                 <View style={st.uploadRow}>
                   <Pressable
@@ -386,8 +425,8 @@ function EntryModal({
                 </Pressable>
               </View>
             </ScrollView>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -416,16 +455,23 @@ export default function MyDayLogPage() {
   const heroSize = width >= 1024 ? 84 : width >= 600 ? 66 : 46;
 
   const {
-    data: entries,
+    items: entries,
     loading,
     refreshing,
     errorText: fetchError,
     refresh,
-    mutate,
-  } = useCachedResource('daylogs', () => fetchResource('daylogs'), {
+    isOnline,
+    pending,
+    createWithFile,
+    updateWithFile,
+    remove,
+  } = useOfflineCollection('daylogs', {
     ttl: TTL.EDITABLE,
     initial: [],
-    errorMessage: 'Cannot reach backend. Check that the Django server is running.',
+    createPath: '/daylogs/',
+    itemPath: (id) => `/daylogs/${id}/`,
+    updateMethod: 'PUT',
+    imageField: 'url',
   });
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [pickedFile, setPickedFile] = useState(null);
@@ -435,6 +481,11 @@ export default function MyDayLogPage() {
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
   const [activeId, setActiveId] = useState(null);
+  const [query, setQuery] = useState('');
+  const [view, setView] = useState('grid');
+  const viewLoaded = useRef(false);
+  const [extras, setExtras] = useState({});
+  const extrasLoaded = useRef(false);
   const toastTimer = useRef(null);
 
   const showToast = useCallback((msg, type = 'success') => {
@@ -443,6 +494,39 @@ export default function MyDayLogPage() {
     toastTimer.current = setTimeout(() => setToast(null), 3000);
   }, []);
   useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+  useEffect(() => {
+    AsyncStorage.getItem(VIEW_KEY).then((v) => {
+      if (v === 'grid' || v === 'timeline') setView(v);
+      viewLoaded.current = true;
+    }).catch(() => { viewLoaded.current = true; });
+  }, []);
+  useEffect(() => {
+    if (viewLoaded.current) AsyncStorage.setItem(VIEW_KEY, view).catch(() => {});
+  }, [view]);
+  useEffect(() => {
+    AsyncStorage.getItem(EXTRAS_KEY).then((raw) => {
+      try { if (raw) setExtras(JSON.parse(raw) || {}); } catch { /* keep defaults */ }
+      extrasLoaded.current = true;
+    }).catch(() => { extrasLoaded.current = true; });
+  }, []);
+  useEffect(() => {
+    if (extrasLoaded.current) AsyncStorage.setItem(EXTRAS_KEY, JSON.stringify(extras)).catch(() => {});
+  }, [extras]);
+
+  const extraForDate = extras[formData.date] || {};
+  const updateExtra = useCallback((patch) => {
+    const key = formData.date;
+    if (!key) return;
+    setExtras((prev) => {
+      const next = { ...(prev[key] || {}), ...patch };
+      if (!next.highlight?.trim() && !next.gratitude?.trim()) {
+        const { [key]: _drop, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [key]: next };
+    });
+  }, [formData.date]);
 
   const openAdd = () => {
     setFormData({ ...EMPTY_FORM, date: todayISO() });
@@ -476,7 +560,7 @@ export default function MyDayLogPage() {
   const pickImage = async () => {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted && perm.status !== 'limited' && Platform.OS === 'ios') {
+      if (!perm.granted && perm.status !== 'limited') {
         showToast('Allow photo access in Settings to pick an image.', 'error');
         return;
       }
@@ -497,36 +581,28 @@ export default function MyDayLogPage() {
     if (!formData.title.trim() || !formData.date) return;
     setSubmitting(true);
 
-    const fd = new FormData();
-    fd.append('title', formData.title.trim());
-    fd.append('date', formData.date);
-    fd.append('mood', formData.mood);
-
-    if (pickedFile) {
-      const name = pickedFile.fileName || `day-${Date.now()}.jpg`;
-      fd.append('file', {
-        uri: pickedFile.uri,
-        name,
-        type: pickedFile.mimeType || 'image/jpeg',
-      });
-      fd.append('source', 'local');
-    } else {
-      fd.append('source', 'remote');
-      fd.append('remote_url', formData.remote_url || '');
-    }
-
-    const url = isEditing ? `/daylogs/${currentId}/` : '/daylogs/';
-    const method = isEditing ? 'PUT' : 'POST';
+    const fields = {
+      title: formData.title.trim(),
+      date: formData.date,
+      mood: formData.mood,
+      source: pickedFile ? 'local' : 'remote',
+      remote_url: pickedFile ? '' : formData.remote_url || '',
+    };
+    const file = pickedFile ? {
+      uri: pickedFile.uri,
+      name: pickedFile.fileName || `day-${Date.now()}.jpg`,
+      type: pickedFile.mimeType || 'image/jpeg',
+      field: 'file',
+    } : null;
 
     try {
-      const saved = await apiUpload(url, fd, { method });
-      if (isEditing) {
-        mutate((p) => (p || []).map((e) => (e.id === saved.id ? saved : e)));
-      } else {
-        mutate((p) => [saved, ...(p || [])]);
-      }
+      const { offline } = isEditing
+        ? await updateWithFile(currentId, fields, file, { method: 'PUT' })
+        : await createWithFile(fields, file);
       closeModal();
-      showToast(isEditing ? 'Day updated.' : 'Day logged.');
+      showToast(offline
+        ? (isEditing ? 'Update saved on this device — will sync.' : 'Day saved on this device — will sync.')
+        : (isEditing ? 'Day updated.' : 'Day logged.'));
     } catch (err) {
       showToast(err.message || 'Submission failed.', 'error');
     } finally {
@@ -536,10 +612,9 @@ export default function MyDayLogPage() {
 
   const performDelete = async (entry) => {
     try {
-      await apiSend(`/daylogs/${entry.id}/`, 'DELETE');
-      mutate((p) => (p || []).filter((e) => e.id !== entry.id));
+      const { offline } = await remove(entry.id);
       setActiveId(null);
-      showToast('Memory removed.');
+      showToast(offline ? 'Removed on this device — will sync.' : 'Memory removed.');
     } catch (err) {
       showToast(err.message || 'Delete failed.', 'error');
     }
@@ -552,16 +627,60 @@ export default function MyDayLogPage() {
     ]);
   };
 
+  const handleShare = async (entry) => {
+    const extra = extras[entry.date] || {};
+    const lines = [
+      `# My Day — ${fmtDate(entry.date)}`,
+      '',
+      entry.title || 'Untitled day',
+      `Mood: ${entry.mood || '—'}`,
+    ];
+    if (extra.highlight?.trim()) lines.push('', `Highlight: ${extra.highlight.trim()}`);
+    if (extra.gratitude?.trim()) lines.push(`Grateful for: ${extra.gratitude.trim()}`);
+    lines.push('', '— logged in Jibunai');
+    const slug = (entry.title || 'day').toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'day';
+    try {
+      const base = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+      const uri = `${base}my-day-${entry.date}-${slug}.md`;
+      await FileSystem.writeAsStringAsync(uri, lines.join('\n'));
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: 'text/markdown', dialogTitle: 'Share your day' });
+      } else {
+        showToast('Sharing is not available on this device.', 'error');
+      }
+    } catch {
+      showToast("Couldn't prepare the share file.", 'error');
+    }
+  };
+
   const sorted = useMemo(
     () => [...entries].sort((a, b) => new Date(b.date) - new Date(a.date)),
     [entries],
   );
 
+  const q = query.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!q) return sorted;
+    return sorted.filter((e) => [e.title, e.mood, e.date]
+      .filter(Boolean).join(' ').toLowerCase().includes(q));
+  }, [sorted, q]);
+
   const columns = useMemo(() => {
     const out = Array.from({ length: cols }, () => []);
-    sorted.forEach((e, i) => out[i % cols].push({ entry: e, index: i }));
+    filtered.forEach((e, i) => out[i % cols].push({ entry: e, index: i }));
     return out;
-  }, [sorted, cols]);
+  }, [filtered, cols]);
+
+  const timelineGroups = useMemo(() => {
+    const map = new Map();
+    filtered.forEach((e) => {
+      const k = e.date || 'undated';
+      if (!map.has(k)) map.set(k, []);
+      map.get(k).push(e);
+    });
+    return [...map.entries()].sort((a, b) => new Date(b[0]) - new Date(a[0]));
+  }, [filtered]);
 
   const toggleActive = useCallback((id) => setActiveId((cur) => (cur === id ? null : id)), []);
 
@@ -641,6 +760,26 @@ export default function MyDayLogPage() {
             </View>
           )}
 
+          {entries.length > 0 && (
+            <View style={st.searchWrap}>
+              <Text style={st.searchIcon}>⌕</Text>
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search past days…"
+                placeholderTextColor={T.placeholder}
+                style={st.searchInput}
+                autoCorrect={false}
+                returnKeyType="search"
+                accessibilityLabel="Search past days"
+              />
+              {!!query && (
+                <Pressable onPress={() => setQuery('')} hitSlop={10} style={st.searchClear} accessibilityLabel="Clear search">
+                  <Text style={st.searchClearText}>×</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
           {!loading && !fetchError && entries.length === 0 && (
             <Pressable onPress={openAdd} style={({ pressed }) => [st.emptyFrame, pressed && { borderColor: T.green }]}>
               <Text style={st.emptyTitle}>Your archive is empty.</Text>
@@ -648,7 +787,36 @@ export default function MyDayLogPage() {
             </Pressable>
           )}
 
-          {sorted.length > 0 && (
+          {!loading && !fetchError && entries.length > 0 && filtered.length === 0 && (
+            <View style={st.emptyFrame}>
+              <Text style={st.emptyTitle}>No days match.</Text>
+              <Text style={st.emptyHint}>Try a different word, mood, or date.</Text>
+            </View>
+          )}
+
+          {filtered.length > 0 && (
+            <View style={st.viewToggle} accessibilityRole="tablist" accessibilityLabel="Change layout">
+              {[
+                ['grid', 'Grid'],
+                ['timeline', 'Timeline'],
+              ].map(([key, label]) => {
+                const sel = view === key;
+                return (
+                  <Pressable
+                    key={key}
+                    onPress={() => setView(key)}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: sel }}
+                    style={[st.viewOpt, sel && st.viewOptActive]}
+                  >
+                    <Text style={[st.viewOptText, sel && st.viewOptTextActive]}>{label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          {filtered.length > 0 && view === 'grid' && (
             <View style={[st.masonry, { gap }]}>
               {columns.map((col, ci) => (
                 <View key={ci} style={st.masonryCol}>
@@ -661,8 +829,47 @@ export default function MyDayLogPage() {
                       onToggle={toggleActive}
                       onEdit={openEdit}
                       onDelete={handleDelete}
+                      onShare={handleShare}
+                      extra={extras[entry.date]}
                     />
                   ))}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {filtered.length > 0 && view === 'timeline' && (
+            <View style={st.timeline}>
+              {timelineGroups.map(([date, list]) => (
+                <View key={date} style={st.tlGroup}>
+                  <View style={st.tlHead}>
+                    <View style={st.tlHeadDot} />
+                    <Text style={st.tlDate}>{date === 'undated' ? 'Undated' : fmtDate(date)}</Text>
+                    <Text style={st.tlCount}>{list.length} {list.length === 1 ? 'entry' : 'entries'}</Text>
+                  </View>
+                  {list.map((entry, i) => {
+                    const mood = MOOD_PALETTE[entry.mood] || MOOD_PALETTE.Neutral;
+                    return (
+                      <View key={entry.id} style={st.tlRow}>
+                        <View style={st.tlRail}>
+                          <View style={[st.tlDot, { backgroundColor: mood.fg }]} />
+                          {i < list.length - 1 && <View style={st.tlLine} />}
+                        </View>
+                        <View style={st.tlCard}>
+                          <PolaroidCard
+                            entry={entry}
+                            index={i}
+                            active={activeId === entry.id}
+                            onToggle={toggleActive}
+                            onEdit={openEdit}
+                            onDelete={handleDelete}
+                            onShare={handleShare}
+                            extra={extras[entry.date]}
+                          />
+                        </View>
+                      </View>
+                    );
+                  })}
                 </View>
               ))}
             </View>
@@ -681,6 +888,8 @@ export default function MyDayLogPage() {
         submitting={submitting}
         onClose={closeModal}
         onSubmit={handleSubmit}
+        extra={extraForDate}
+        onExtraChange={updateExtra}
       />
 
       {toast && <Toast key={toast.k} toast={toast} wide={width >= 700} />}
@@ -750,6 +959,34 @@ const st = StyleSheet.create({
   emptyHint: { fontFamily: F.sans, fontSize: 15, color: T.muted, opacity: 0.7, textAlign: 'center' },
 
   masonry: { flexDirection: 'row', alignItems: 'flex-start', paddingTop: 12 },
+  searchWrap: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',
+    borderWidth: 1, borderColor: T.border, borderRadius: 50,
+    paddingLeft: 16, paddingRight: 8, marginBottom: 28,
+  },
+  searchIcon: { fontSize: 17, color: T.muted, marginRight: 8, fontFamily: F.sans },
+  searchInput: { flex: 1, fontFamily: F.sans, fontSize: 15, color: T.ink, paddingVertical: Platform.OS === 'ios' ? 13 : 9 },
+  searchClear: { padding: 8 },
+  searchClearText: { fontSize: 22, color: T.muted, lineHeight: 24, fontFamily: F.sans },
+  viewToggle: {
+    flexDirection: 'row', alignSelf: 'center', backgroundColor: T.warm,
+    borderWidth: 1, borderColor: T.border, borderRadius: 50, padding: 3, marginBottom: 28,
+  },
+  viewOpt: { paddingVertical: 8, paddingHorizontal: 22, borderRadius: 50 },
+  viewOptActive: { backgroundColor: T.ink },
+  viewOptText: { fontFamily: F.sansMed, fontSize: 13.5, color: T.muted },
+  viewOptTextActive: { color: '#fff', fontFamily: F.sansBold },
+  timeline: { gap: 30, paddingTop: 12 },
+  tlGroup: { gap: 0 },
+  tlHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
+  tlHeadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: T.green },
+  tlDate: { fontFamily: F.serif, fontSize: 19, color: T.ink },
+  tlCount: { fontFamily: F.mono, fontSize: 11, color: T.stamp },
+  tlRow: { flexDirection: 'row', alignItems: 'stretch' },
+  tlRail: { width: 22, alignItems: 'center', paddingTop: 40 },
+  tlDot: { width: 10, height: 10, borderRadius: 5 },
+  tlLine: { width: 1.5, flex: 1, backgroundColor: T.border, marginTop: 6, marginBottom: -28 },
+  tlCard: { flex: 1, minWidth: 0 },
   masonryCol: { flex: 1, minWidth: 0 },
   cardWrap: { marginBottom: 34, paddingHorizontal: 4 },
 
@@ -769,13 +1006,14 @@ const st = StyleSheet.create({
   photo: { width: '100%' },
   photoOverlay: {
     ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(26,20,16,0.5)',
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, zIndex: 3,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, flexWrap: 'wrap', paddingHorizontal: 10, zIndex: 3,
   },
   noPhoto: {
     backgroundColor: T.warm, borderWidth: 1, borderColor: T.border, borderStyle: 'dashed',
     borderRadius: 1, height: 120, alignItems: 'center', justifyContent: 'center', marginBottom: 14,
   },
-  noPhotoActions: { flexDirection: 'row', gap: 12 },
+  noPhotoActions: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center' },
   obtn: {
     backgroundColor: T.cream, borderRadius: 50, paddingVertical: 8, paddingHorizontal: 16,
     ...shadow(2, 0.12, 4),
@@ -786,6 +1024,8 @@ const st = StyleSheet.create({
   moodTag: { alignSelf: 'flex-start', paddingVertical: 2, paddingHorizontal: 9, borderRadius: 3 },
   moodTagText: { fontFamily: F.monoMed, fontSize: 10.5, letterSpacing: 1.1 },
   cardTitle: { fontFamily: F.serif, fontSize: 17, lineHeight: 24, color: T.ink },
+  cardHighlight: { fontFamily: F.serifItalic, fontSize: 14, lineHeight: 21, color: T.green },
+  cardGrateful: { fontFamily: F.sans, fontSize: 12.5, lineHeight: 19, color: T.muted },
 
   overlay: {
     flex: 1, backgroundColor: 'rgba(26,20,16,0.6)',
@@ -814,6 +1054,7 @@ const st = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: Platform.OS === 'ios' ? 14 : 11,
     fontFamily: F.sans, fontSize: 15.5, color: T.ink,
   },
+  fInputMulti: { minHeight: 64, textAlignVertical: 'top' },
   dateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   dateBtnText: { fontFamily: F.sans, fontSize: 15, color: T.ink, flexShrink: 1 },
   datePickerWrap: {

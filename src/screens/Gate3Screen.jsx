@@ -1,8 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { C, F } from '../theme';
+import { C, F, radii } from '../theme';
 import { validateSecretCode } from '../utils/validation';
 import { gate3 } from '../api/auth';
 
@@ -27,7 +27,8 @@ export default function Gate3Screen({ preauthToken, onSuccess, onBack }) {
     setSubmitting(true);
     try {
       const { auth_token, user } = await gate3(preauthToken, secretCode);
-      onSuccess(auth_token, user);
+      if (!auth_token) throw new Error('Invalid secret code. Try again.');
+      await onSuccess(auth_token, user);
     } catch (err) {
       setError(err.message || 'Invalid secret code. Try again.');
     } finally {
@@ -113,7 +114,7 @@ const st = StyleSheet.create({
     backgroundColor: C.white,
     borderWidth: 1,
     borderColor: C.border,
-    borderRadius: C.radii.md,
+    borderRadius: radii.md,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontFamily: F.sans,
@@ -137,7 +138,7 @@ const st = StyleSheet.create({
   },
   button: {
     backgroundColor: C.green,
-    borderRadius: C.radii.lg,
+    borderRadius: radii.lg,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 22,

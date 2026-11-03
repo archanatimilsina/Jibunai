@@ -1,11 +1,35 @@
 from rest_framework import serializers
 from .models import Challenge, ChallengeDay,ProfessionalDevelopment, Project, AboutMe, DayLog, Task, ScrapbookStamp,OperativeNote, DreamWish, WatchlistItem, OperativeGoal,  HobbyItem, MusicVibeItem, PDFDocument, BlogCategory, BlogPost, BlogComment
 import json
+import ipaddress
 import requests
+import socket
 from django.core.files.base import ContentFile
 from urllib.parse import urlparse
 from datetime import timedelta
-from rest_framework import serializers
+
+# Max bytes we'll pull from a user-supplied image URL (A10 SSRF/DoS guard).
+REMOTE_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+
+
+def _remote_host_is_public(hostname):
+    """True only if every resolved IP of hostname is public routable."""
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return False
+    ips = {info[4][0] for info in infos}
+    if not ips:
+        return False
+    for ip in ips:
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            return False
+        if (addr.is_private or addr.is_loopback or addr.is_link_local
+                or addr.is_multicast or addr.is_reserved or addr.is_unspecified):
+            return False
+    return True
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -35,7 +59,10 @@ class ProfessionalDevelopmentSerializer(serializers.ModelSerializer):
 
 
 class AboutMeSerializer(serializers.ModelSerializer):
-    baseSecretCode = serializers.CharField(source='base_secret_code')
+    # The gate credential is never returned by the API (write-only).
+    # sidebarCode/portalDream stay readable: the web profile page displays
+    # and edits them (see web/src/ArchanaArea/components/AboutMe.jsx).
+    baseSecretCode = serializers.CharField(source='base_secret_code', write_only=True)
     sidebarCode = serializers.CharField(source='sidebar_code', required=False, allow_blank=True)
     portalDream = serializers.CharField(source='portal_dream')
     timestamp = serializers.DateTimeField(source='created_at', read_only=True)
@@ -96,21 +123,46 @@ class ScrapbookStampSerializer(serializers.ModelSerializer):
 
     def _download_image_from_url(self, validated_data):
         remote_url = validated_data.get('url')
-        if remote_url and validated_data.get('source') == 'remote':
-            try:
-                response = requests.get(remote_url, stream=True, timeout=10)
-                if response.status_code == 200:
-                    name = urlparse(remote_url).path.split('/')[-1]
-                    if not name:
-                        name = "downloaded_image.jpg"
-                    
-                    validated_data['remote_url'] = remote_url
-                    validated_data['image'] = ContentFile(response.content, name=name)
-                    validated_data.pop('url', None)
-                else:
-                    raise serializers.ValidationError({"url": "Could not download image from provided URL."})
-            except requests.RequestException:
-                raise serializers.ValidationError({"url": "Error connecting to remote image URL."})
+        if not (remote_url and validated_data.get('source') == 'remote'):
+            return
+        try:
+            parsed = urlparse(remote_url)
+        except ValueError:
+            raise serializers.ValidationError({"url": "Invalid URL."})
+        if parsed.scheme not in ('http', 'https') or not parsed.hostname:
+            raise serializers.ValidationError({"url": "Only http(s) image URLs are allowed."})
+        if not _remote_host_is_public(parsed.hostname):
+            raise serializers.ValidationError({"url": "That host is not allowed."})
+        try:
+            response = requests.get(remote_url, stream=True, timeout=10)
+            if response.status_code != 200:
+                raise serializers.ValidationError({"url": "Could not download image from provided URL."})
+            # Redirects can hop to an internal host — re-check the final URL.
+            final = urlparse(response.url or '')
+            if final.hostname and final.hostname != parsed.hostname and not _remote_host_is_public(final.hostname):
+                raise serializers.ValidationError({"url": "That host is not allowed."})
+            ctype = (response.headers.get('Content-Type') or '').split(';')[0].strip().lower()
+            if ctype and not ctype.startswith('image/'):
+                raise serializers.ValidationError({"url": "URL did not return an image."})
+            length = response.headers.get('Content-Length')
+            if length and length.isdigit() and int(length) > REMOTE_IMAGE_MAX_BYTES:
+                raise serializers.ValidationError({"url": "Image is too large (max 5 MB)."})
+            chunks = []
+            total = 0
+            for chunk in response.iter_content(262144):
+                if not chunk:
+                    continue
+                total += len(chunk)
+                if total > REMOTE_IMAGE_MAX_BYTES:
+                    raise serializers.ValidationError({"url": "Image is too large (max 5 MB)."})
+                chunks.append(chunk)
+            data = b''.join(chunks)
+        except requests.RequestException:
+            raise serializers.ValidationError({"url": "Error connecting to remote image URL."})
+        name = (parsed.path.rsplit('/', 1)[-1] or '').strip()[:100] or "downloaded_image.jpg"
+        validated_data['remote_url'] = remote_url
+        validated_data['image'] = ContentFile(data, name=name)
+        validated_data.pop('url', None)
 
     def create(self, validated_data):
         if validated_data.get('source') == 'remote':
@@ -316,6 +368,10 @@ class ChallengeSerializer(serializers.ModelSerializer):
         start_date = attrs.get('start_date', getattr(self.instance, 'start_date', None))
         if type_ == Challenge.ChallengeType.DAYS:
             duration = attrs.get('duration_days', getattr(self.instance, 'duration_days', None))
+            if not start_date:
+                raise serializers.ValidationError(
+                    {'start_date': 'Required for a days challenge.'}
+                )
             if not duration or duration < 1:
                 raise serializers.ValidationError(
                     {'duration_days': 'Required and must be at least 1 for a days challenge.'}
@@ -324,6 +380,10 @@ class ChallengeSerializer(serializers.ModelSerializer):
             attrs['end_date'] = start_date + timedelta(days=duration - 1)
         elif type_ == Challenge.ChallengeType.INSTANT:
             end_date = attrs.get('end_date', getattr(self.instance, 'end_date', None))
+            if not start_date:
+                raise serializers.ValidationError(
+                    {'start_date': 'Required for an instant challenge.'}
+                )
             if not end_date:
                 raise serializers.ValidationError({'end_date': 'Required for an instant challenge.'})
             if end_date < start_date:
@@ -369,7 +429,11 @@ class PDFDocumentSerializer(serializers.ModelSerializer):
     def get_download_url(self, obj):
         request = self.context.get("request")
         if request:
-            return request.build_absolute_uri(f"/api/pdfs/{obj.id}/download/")
+            # reverse() keeps working under a script prefix; no hardcoded /api.
+            from django.urls import reverse
+            return request.build_absolute_uri(
+                reverse("pdf-download", kwargs={"id": obj.id})
+            )
         return None
 
     def get_size_kb(self, obj):

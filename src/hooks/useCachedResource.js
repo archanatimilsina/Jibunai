@@ -9,6 +9,7 @@ import {
   register,
   setData,
   subscribe,
+  unregister,
 } from '../api/cache';
 
 /**
@@ -73,6 +74,7 @@ export default function useCachedResource(key, fetcher, options = {}) {
     return () => {
       alive = false;
       unsub();
+      unregister(key);
     };
   }, [key, ttl, enabled]);
 

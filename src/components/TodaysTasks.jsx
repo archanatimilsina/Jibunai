@@ -9,9 +9,8 @@ import {
 import { Feather } from '@expo/vector-icons';
 
 import { C, mono, radii, shadow } from '../theme';
-import { apiSend } from '../api/http';
-import { fetchResource, TTL } from '../api/resources';
-import useCachedResource from '../hooks/useCachedResource';
+import useOfflineCollection from '../hooks/useOfflineCollection';
+import { TTL } from '../api/resources';
 
 const pad = (n) => String(n).padStart(2, '0');
 const toISODate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -26,16 +25,17 @@ const todayISO = () => toISODate(new Date());
  */
 export default function TodaysTasks({ onNavigate }) {
   const {
-    data,
+    items: data,
     loading,
     refreshing,
     errorText,
     refresh,
-    mutate,
-  } = useCachedResource('tasks', () => fetchResource('tasks'), {
+    update,
+  } = useOfflineCollection('tasks', {
     ttl: TTL.LIVE,
     initial: [],
-    errorMessage: 'Could not load your tasks.',
+    createPath: '/tasks/',
+    itemPath: (id) => `/tasks/${id}/`,
   });
 
   const [busyId, setBusyId] = useState(null);
@@ -57,14 +57,13 @@ export default function TodaysTasks({ onNavigate }) {
   const complete = useCallback(async (task) => {
     setBusyId(task.id);
     try {
-      const updated = await apiSend(`/tasks/${task.id}/`, 'PATCH', { completed: true });
-      mutate((p) => (p || []).map((t) => (t.id === task.id ? { ...t, ...updated } : t)));
+      await update(task.id, { completed: true });
     } catch {
-      // leave the task open — the next refresh will tell the truth
+      // queued offline or failed — the next refresh will tell the truth
     } finally {
       setBusyId(null);
     }
-  }, [mutate]);
+  }, [update]);
 
   const openChronos = useCallback(() => onNavigate?.('chronos'), [onNavigate]);
 
@@ -112,12 +111,11 @@ export default function TodaysTasks({ onNavigate }) {
             {pending.map((task, i) => {
               const busy = busyId === task.id;
               return (
-                <Pressable
+                <View
                   key={task.id}
-                  onPress={openChronos}
                   accessibilityRole="button"
                   accessibilityLabel={`${task.text}. Open Chronos`}
-                  style={({ pressed }) => [st.item, i > 0 && st.itemSep, pressed && { opacity: 0.6 }]}
+                  style={[st.item, i > 0 && st.itemSep]}
                 >
                   <Pressable
                     onPress={() => complete(task)}
@@ -134,10 +132,16 @@ export default function TodaysTasks({ onNavigate }) {
                       <Feather name="square" size={18} color={C.soft} />
                     )}
                   </Pressable>
-                  <Text style={st.itemTitle} numberOfLines={2}>
-                    {task.text}
-                  </Text>
-                </Pressable>
+                  <Pressable
+                    onPress={openChronos}
+                    accessibilityLabel={`${task.text}. Open Chronos`}
+                    style={({ pressed }) => [{ flex: 1 }, pressed && { opacity: 0.6 }]}
+                  >
+                    <Text style={st.itemTitle} numberOfLines={2}>
+                      {task.text}
+                    </Text>
+                  </Pressable>
+                </View>
               );
             })}
           </View>

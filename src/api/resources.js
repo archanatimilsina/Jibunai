@@ -16,7 +16,7 @@ export const TTL = {
 export const RESOURCES = {
   notes: { path: '/node-matrix/', ttl: TTL.EDITABLE, list: true },
   tasks: { path: '/tasks/', ttl: TTL.LIVE, list: true },
-  goals: { path: '/Goals/', ttl: TTL.LIVE, list: true },
+  goals: { path: '/goals/', ttl: TTL.LIVE, list: true },
   challenges: { path: '/challenges/', ttl: TTL.LIVE, list: true },
   watchlist: { path: '/watchlist/', ttl: TTL.STATIC, list: true },
   hobbies: { path: '/hobbies/', ttl: TTL.STATIC, list: true },

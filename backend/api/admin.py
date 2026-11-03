@@ -22,7 +22,8 @@ class ProjectAdmin(admin.ModelAdmin):
 
 @admin.register(AboutMe)
 class AboutMeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'email', 'phone', 'base_secret_code', 'created_at')
+    # Never show the gate credential in the changelist.
+    list_display = ('name', 'email', 'phone', 'created_at')
     search_fields = ('name', 'email')
 @admin.register(DayLog)
 class DayLogAdmin(admin.ModelAdmin):

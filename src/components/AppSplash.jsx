@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, Easing, Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, mono } from '../theme';
@@ -10,12 +10,24 @@ const ART = 180;
 export default function AppSplash({ onDone, hold = 700 }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled?.().then(setReduceMotion).catch(() => {});
+  }, []);
 
   const word = useRef(new Animated.Value(0)).current;
   const rule = useRef(new Animated.Value(0)).current;
   const fade = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (reduceMotion) {
+      word.setValue(1);
+      rule.setValue(1);
+      fade.setValue(1);
+      const t = setTimeout(() => onDone?.(), 0);
+      return () => clearTimeout(t);
+    }
     const intro = Animated.sequence([
       Animated.timing(word, {
         toValue: 1,
@@ -35,7 +47,7 @@ export default function AppSplash({ onDone, hold = 700 }) {
     });
 
     return () => intro.stop();
-  }, [hold, word, rule, fade, onDone]);
+  }, [hold, word, rule, fade, onDone, reduceMotion]);
 
   // the artwork sits exactly where the native splash icon was, so the
   // hand-over from the system splash to this one is invisible

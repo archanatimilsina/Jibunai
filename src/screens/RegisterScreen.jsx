@@ -1,11 +1,11 @@
 import React, { useState, useCallback } from 'react';
 import {
-  Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
+  Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
-import { C, F } from '../theme';
+import { C, F, radii } from '../theme';
 import {
   validateRequired,
   validateUsername,
@@ -41,14 +41,17 @@ export default function RegisterScreen({ onRegistered }) {
 
   const showDatePicker = () => setDatePickerOpen(true);
 
-  const hideDatePicker = useCallback(() => {
-    setDatePickerOpen(false);
-    if (dateValue) {
-      const d = new Date(dateValue);
-      const iso = d.toISOString().slice(0, 10);
-      setFields((prev) => ({ ...prev, date_of_birth: iso }));
-      setErrors((prev) => ({ ...prev, date_of_birth: null }));
+  const onPickerChange = useCallback((event, selectedDate) => {
+    if (event?.type === 'dismissed') {
+      setDatePickerOpen(false);
+      return;
     }
+    const d = selectedDate || dateValue || new Date();
+    setDateValue(d);
+    const iso = d.toISOString().slice(0, 10);
+    setFields((prev) => ({ ...prev, date_of_birth: iso }));
+    setErrors((prev) => ({ ...prev, date_of_birth: null }));
+    if (Platform.OS !== 'ios') setDatePickerOpen(false);
   }, [dateValue]);
 
   const validate = useCallback(() => {
@@ -88,6 +91,10 @@ export default function RegisterScreen({ onRegistered }) {
   }, [fields, validate, onRegistered]);
 
   return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
     <ScrollView
       contentContainerStyle={st.wrap}
       keyboardShouldPersistTaps="handled"
@@ -100,26 +107,24 @@ export default function RegisterScreen({ onRegistered }) {
 
         <Text style={st.label}>Full name</Text>
         <TextInput
-          style={st.input}
+          style={[st.input, errors.full_name && st.inputError]}
           value={fields.full_name}
           onChangeText={(v) => setField('full_name', v)}
           placeholder="e.g. Archana Timilsina"
           autoCapitalize="words"
           autoComplete="name"
           returnKeyType="next"
-          error={!!errors.full_name}
         />
         {errors.full_name && <Text style={st.error}>{errors.full_name}</Text>}
 
         <Text style={st.label}>Username</Text>
         <TextInput
-          style={st.input}
+          style={[st.input, errors.username && st.inputError]}
           value={fields.username}
           onChangeText={(v) => setField('username', v)}
           placeholder="e.g. archana_95"
           autoComplete="username"
           returnKeyType="next"
-          error={!!errors.username}
         />
         {errors.username && <Text style={st.error}>{errors.username}</Text>}
 
@@ -133,19 +138,18 @@ export default function RegisterScreen({ onRegistered }) {
 
         <Text style={st.label}>Your dream</Text>
         <TextInput
-          style={[st.input, st.multiline]}
+          style={[st.input, st.multiline, errors.dream && st.inputError]}
           value={fields.dream}
           onChangeText={(v) => setField('dream', v)}
           placeholder="What is your portal dream?"
           autoComplete="off"
           returnKeyType="next"
-          error={!!errors.dream}
         />
         {errors.dream && <Text style={st.error}>{errors.dream}</Text>}
 
         <Text style={st.label}>Secret code (4-8 chars)</Text>
         <TextInput
-          style={st.input}
+          style={[st.input, errors.secret_code && st.inputError]}
           value={fields.secret_code}
           onChangeText={(v) => setField('secret_code', v)}
           placeholder="Any letters, numbers or symbols"
@@ -154,7 +158,6 @@ export default function RegisterScreen({ onRegistered }) {
           maxLength={8}
           returnKeyType="done"
           onSubmitEditing={handleSubmit}
-          error={!!errors.secret_code}
         />
         {errors.secret_code && <Text style={st.error}>{errors.secret_code}</Text>}
 
@@ -180,19 +183,20 @@ export default function RegisterScreen({ onRegistered }) {
             value={dateValue || new Date()}
             mode="date"
             display={Platform.OS === 'ios' ? 'default' : 'spinner'}
-            onChange={hideDatePicker}
+            onChange={onPickerChange}
             minimumDate={new Date(1900, 0, 1)}
             maximumDate={new Date()}
           />
         </View>
       )}
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const st = StyleSheet.create({
   wrap: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: C.bg,
     paddingHorizontal: 20,
     paddingBottom: 30,
@@ -230,7 +234,7 @@ const st = StyleSheet.create({
     backgroundColor: C.white,
     borderWidth: 1,
     borderColor: C.border,
-    borderRadius: C.radii.md,
+    borderRadius: radii.md,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontFamily: F.sans,
@@ -246,6 +250,9 @@ const st = StyleSheet.create({
     flex: 1,
     color: C.dark,
   },
+  inputError: {
+    borderColor: C.danger,
+  },
   error: {
     marginTop: 4,
     fontFamily: F.sans,
@@ -254,7 +261,7 @@ const st = StyleSheet.create({
   },
   button: {
     backgroundColor: C.green,
-    borderRadius: C.radii.lg,
+    borderRadius: radii.lg,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 26,

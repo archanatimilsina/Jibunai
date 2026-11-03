@@ -55,7 +55,7 @@ required to build or run the app, but it is here so this project works alone.
 npm run mongo            # docker compose up -d mongo
 npm run backend:install  # pip install -r backend/requirements.txt
 npm run backend:migrate
-npm run backend:start    # http://localhost:3000
+npm run backend:start    # http://localhost:8000
 ```
 
 Fill in `DATABASE_URL`, `DJANGO_SECRET_KEY`, and the Supabase values in
@@ -85,9 +85,10 @@ tablet, three on a wide screen.
 
 Every icon comes from `assets/jibunai-logo.png`, cut from the Jibunai artwork
 with the stray corner marks removed. `icon.png` is the 1024 app icon,
-`android-icon-foreground.png` the adaptive layer,
-`android-icon-monochrome.png` the themed silhouette, and `splash-icon.png` the
-launch image.
+`android-icon-background.png` the adaptive background,
+`android-icon-foreground.png` the adaptive foreground,
+`android-icon-monochrome.png` the Android 13+ themed silhouette, and
+`splash-artwork.png` the launch image (also referenced by `app.json`).
 
 ## Other scripts
 
@@ -108,3 +109,8 @@ launch image.
   instead of a blank page.
 - `web/src/ArchanaArea` is a copy of the desktop app's `frontend/src/ArchanaArea`.
   Keep editing it here for mobile-only tweaks.
+- Release builds read `EXPO_PUBLIC_API_URL` from EAS secrets, not `.env`:
+  `eas secret:create --scope project --name EXPO_PUBLIC_API_URL --value https://…`
+  (the `development` profile hardcodes the emulator at `http://10.0.2.2:8000`).
+- `npm run mongo` / `compose.yml` is legacy — nothing in the app uses Mongo;
+  the API runs on Supabase Postgres (`backend/.env`).

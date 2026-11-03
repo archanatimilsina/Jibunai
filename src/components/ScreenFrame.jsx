@@ -9,6 +9,8 @@ export default function ScreenFrame({ title, subtitle, onHome, children }) {
   const insets = useSafeAreaInsets();
 
   const innerInsets = useMemo(
+    // The bar above already consumed the top inset (paddingTop: insets.top),
+    // so children start below it with top: 0 — no double notch padding.
     () => ({ ...insets, top: 0 }),
     [insets]
   );
@@ -67,7 +69,6 @@ const st = StyleSheet.create({
     borderColor: C.borderLt,
     backgroundColor: C.surface,
   },
-  iconBtnDark: { backgroundColor: C.dark, borderColor: C.dark },
   titles: { flex: 1, alignItems: 'center' },
   title: { fontFamily: F.sansBold, fontSize: 15, color: C.dark, letterSpacing: 0.2 },
   subtitle: {

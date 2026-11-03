@@ -1,8 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { C, F } from '../theme';
+import { C, F, radii } from '../theme';
 import { validateRequired } from '../utils/validation';
 import { gate2 } from '../api/auth';
 
@@ -19,14 +19,15 @@ export default function Gate2Screen({ preauthToken, onSuccess, onBack }) {
 
   const handleSubmit = useCallback(async () => {
     setError(null);
-    if (!validateRequired(dream, 'Dream')) {
+    const dreamError = validateRequired(dream, 'Dream');
+    if (dreamError) {
       setError('Please enter your dream.');
       return;
     }
     setSubmitting(true);
     try {
-      await gate2(preauthToken, dream.trim());
-      onSuccess();
+      const res = await gate2(preauthToken, dream.trim());
+      onSuccess(res?.preauth_token || preauthToken);
     } catch (err) {
       setError(err.message || 'Invalid credentials. Try again.');
     } finally {
@@ -107,7 +108,7 @@ const st = StyleSheet.create({
     backgroundColor: C.white,
     borderWidth: 1,
     borderColor: C.border,
-    borderRadius: C.radii.md,
+    borderRadius: radii.md,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontFamily: F.sans,
@@ -127,7 +128,7 @@ const st = StyleSheet.create({
   },
   button: {
     backgroundColor: C.green,
-    borderRadius: C.radii.lg,
+    borderRadius: radii.lg,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 24,

@@ -1,5 +1,11 @@
 # Rotating Wheel Tab Navigation — Implementation Specification
 
+> **Status note (2026-11):** the visual/behavioural §§ below (dark navy theme,
+> click-to-confirm) were overridden by `PROMPTS.md` — the implementation is
+> intentionally light-themed with auto-navigate on align + circle→wheel morph.
+> The structural §§ (reduced-motion, keyboard/Escape/focus handling, testing
+> checklist) still apply.
+
 ## 1. Objective
 
 Replace the existing right-side sliding sidebar with a rotating circular navigation wheel matching the provided reference image.

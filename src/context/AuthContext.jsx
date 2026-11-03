@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { logoutApi, me as fetchMe } from '../api/auth';
+import { secureDelete, secureGet, secureSet } from '../api/secureStore';
 
 const TOKEN_KEY = 'jibunai_auth_token';
 const USER_KEY = 'jibunai_auth_user';
@@ -21,15 +22,22 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
 
-  // Hydrate auth state from AsyncStorage on first load.
+  // Hydrate auth state. The token lives in SecureStore (Keychain/Keystore);
+  // on first launch after this change we migrate a legacy AsyncStorage token.
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const [storedToken, storedUser] = await Promise.all([
-          AsyncStorage.getItem(TOKEN_KEY),
-          AsyncStorage.getItem(USER_KEY),
-        ]);
+        let storedToken = await secureGet(TOKEN_KEY);
+        if (!storedToken) {
+          const legacy = await AsyncStorage.getItem(TOKEN_KEY);
+          if (legacy) {
+            await secureSet(TOKEN_KEY, legacy);
+            await AsyncStorage.removeItem(TOKEN_KEY);
+            storedToken = legacy;
+          }
+        }
+        const storedUser = await AsyncStorage.getItem(USER_KEY);
         if (!mounted) return;
         setToken(storedToken || null);
         setUser(storedUser ? JSON.parse(storedUser) : null);
@@ -47,10 +55,11 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback(async (newToken, newUser) => {
-    await AsyncStorage.setItem(TOKEN_KEY, newToken);
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(newUser));
+    if (!newToken) throw new Error('Missing auth token.');
+    await secureSet(TOKEN_KEY, newToken);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(newUser ?? null));
     setToken(newToken);
-    setUser(newUser);
+    setUser(newUser ?? null);
   }, []);
 
   const logout = useCallback(async () => {
@@ -63,7 +72,7 @@ export function AuthProvider({ children }) {
         /* server unreachable — local state is cleared regardless */
       }
     }
-    await AsyncStorage.removeItem(TOKEN_KEY);
+    await secureDelete(TOKEN_KEY);
     await AsyncStorage.removeItem(USER_KEY);
     setToken(null);
     setUser(null);
@@ -76,9 +85,12 @@ export function AuthProvider({ children }) {
       setUser(userData);
       await AsyncStorage.setItem(USER_KEY, JSON.stringify(userData));
       return userData;
-    } catch {
-      // Token expired or invalid -> force logout.
-      await logout();
+    } catch (err) {
+      // Only drop the session when the server rejects the token (401).
+      // Network timeouts / 5xx keep local state so a blip can't sign out.
+      if (err?.status === 401) {
+        await logout();
+      }
       return null;
     }
   }, [token, logout]);

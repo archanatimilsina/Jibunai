@@ -21,6 +21,12 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# Secrets — never commit. Copy from *.example instead.
+.env
+backend/.env
+web/.env
+!.env.example
+!web/.env.example
 .env*.local
 
 *.tsbuildinfo
@@ -38,7 +44,13 @@ yarn-error.*
 /web/node_modules/
 /web/dist/
 /web/.vite/
-tasks.md
+# tasks.md + PROMPTS.md hold active requirements — keep them tracked.
 
+# Local migration backups from the Jibunai/ -> monorepo move (Nov 2026).
+# The old production backend/frontend are safe in Archive/ locally;
+/Archive/jibunai-backend-backup-*/
+/Archive/jibunai-frontend-backup-*/
+/Archive/*.bundle
 
-PROMPTS.md
+# Accidental sqlite at repo root (real DB URL lives in backend/.env).
+/db.sqlite3

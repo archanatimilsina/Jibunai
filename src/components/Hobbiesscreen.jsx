@@ -6,19 +6,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { enableLayoutAnimation } from '../utils/layoutAnimation';
-import useCachedResource from '../hooks/useCachedResource';
-import { apiSend } from '../api/http';
-import { fetchResource, TTL } from '../api/resources';
+import useOfflineCollection from '../hooks/useOfflineCollection';
+import { TTL } from '../api/resources';
+import { C as TC, mono } from '../theme';
 
 enableLayoutAnimation();
 
 
-const C = {
-  white: '#ffffff', border: '#d8d4cc', green: '#2d6a4f', greenLt: '#e4f1ea', dark: '#1a1a2e',
-  soft: '#7a7567', muted: '#eceae3', danger: '#c0392b', dangerLt: '#fdecea', ph: '#bdb8ad',
-};
+const C = { ...TC, dangerLt: '#fdecea' };
 const EMPTY_FORM = { emoji: '', title: '', text: '' };
-const mono = Platform.select({ ios: 'Menlo', default: 'monospace' });
 const openShadow = { shadowColor: '#1a1a2e', shadowOpacity: 0.09, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 4 };
 const anim = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 
@@ -105,16 +101,21 @@ export default function HobbiesScreen() {
   const pad = width >= 768 ? 40 : 20;
 
   const {
-    data: hobbies,
+    items: hobbies,
     loading,
     refreshing,
     errorText: fetchError,
     refresh,
-    mutate,
-  } = useCachedResource('hobbies', () => fetchResource('hobbies'), {
+    isOnline,
+    pending,
+    create,
+    update,
+    remove,
+  } = useOfflineCollection('hobbies', {
     ttl: TTL.STATIC,
     initial: [],
-    errorMessage: 'Could not load hobbies. Make sure the backend is running.',
+    createPath: '/hobbies/',
+    itemPath: (id) => `/hobbies/${id}/`,
   });
   const [toast, setToast] = useState(null);
 
@@ -144,17 +145,16 @@ export default function HobbiesScreen() {
     if (!newHobby.title.trim() || !newHobby.text.trim()) { showToast('Add a title and a description.', 'error'); return; }
     setCreating(true);
     try {
-      const created = await apiSend('/hobbies/', 'POST', {
+      const { data, offline } = await create({
         emoji: newHobby.emoji.trim() || '✨',
         title: newHobby.title.trim(),
         text: newHobby.text.trim(),
       });
       anim();
-      mutate((p) => [...(p || []), created]);
-      setOpenId(created.id);
+      setOpenId(data.id);
       setNewHobby(EMPTY_FORM);
       setIsCreating(false);
-      showToast('Hobby added.');
+      showToast(offline ? 'Hobby saved on this device — will sync.' : 'Hobby added.');
     } catch (e) { showToast(e.message, 'error'); }
     finally { setCreating(false); }
   };
@@ -169,26 +169,24 @@ export default function HobbiesScreen() {
     if (!editHobby.title.trim() || !editHobby.text.trim()) { showToast('Add a title and a description.', 'error'); return; }
     setUpdating(true);
     try {
-      const updated = await apiSend(`/hobbies/${id}/`, 'PATCH', {
+      const { offline } = await update(id, {
         emoji: editHobby.emoji.trim() || '✨',
         title: editHobby.title.trim(),
         text: editHobby.text.trim(),
       });
       anim();
-      mutate((p) => (p || []).map((h) => (h.id === id ? updated : h)));
       setEditingId(null);
-      showToast('Hobby updated.');
+      showToast(offline ? 'Update saved on this device — will sync.' : 'Hobby updated.');
     } catch (e) { showToast(e.message, 'error'); }
     finally { setUpdating(false); }
   };
 
   const deleteNow = async (id) => {
     try {
-      await apiSend(`/hobbies/${id}/`, 'DELETE');
+      const { offline } = await remove(id);
       anim();
-      mutate((p) => (p || []).filter((h) => h.id !== id));
       if (openId === id) setOpenId(null);
-      showToast('Hobby removed.');
+      showToast(offline ? 'Removed on this device — will sync.' : 'Hobby removed.');
     } catch (e) { showToast(e.message, 'error'); }
   };
   const handleDelete = (h) => Alert.alert('Remove this hobby permanently?', `“${h.title}” will be deleted.`, [
@@ -206,7 +204,7 @@ export default function HobbiesScreen() {
   const toastErr = toast?.type === 'error';
 
   return (
-    <SafeAreaView style={s.page} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={s.page} edges={['top', 'left', 'right', 'bottom']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           contentContainerStyle={{ paddingBottom: 90 }} keyboardShouldPersistTaps="handled"
@@ -295,7 +293,7 @@ export default function HobbiesScreen() {
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#fafaf8' },
+  page: { flex: 1, backgroundColor: C.bg },
   wrap: { width: '100%', maxWidth: 1280, alignSelf: 'center', paddingTop: 34 },
 
   secHeading: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 22 },

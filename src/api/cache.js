@@ -40,7 +40,16 @@ export function subscribe(key, listener) {
 
 /** Register a resource so the lifecycle controller can refresh it in the background. */
 export function register(key, fetcher, ttl) {
-  registry.set(key, { fetcher, ttl });
+  const prev = registry.get(key);
+  registry.set(key, { fetcher, ttl, refs: (prev?.refs || 0) + 1 });
+}
+
+/** Release a registration; the key drops out once its last user unmounts. */
+export function unregister(key) {
+  const prev = registry.get(key);
+  if (!prev) return;
+  if (prev.refs > 1) registry.set(key, { ...prev, refs: prev.refs - 1 });
+  else registry.delete(key);
 }
 
 export function getRegistered() {

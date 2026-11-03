@@ -17,18 +17,40 @@
           "resizeMode": "contain",
           "backgroundColor": "#f6f5f0"
         }
-      ]
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#2d6a4f"
+        }
+      ],
+      "expo-audio",
+      "expo-music-library",
+      "expo-sharing",
+      "expo-asset"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.archanatimilsina.jibunai"
+      "bundleIdentifier": "com.archanatimilsina.jibunai",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Allow Jibunai to access your photos so you can attach images to your memories.",
+        "NSPhotoLibraryAddUsageDescription": "Allow Jibunai to save images to your photo library.",
+        "NSAppleMusicUsageDescription": "Allow Jibunai to play music from your library."
+      }
     },
     "android": {
       "package": "com.archanatimilsina.jibunai",
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "SCHEDULE_EXACT_ALARM",
+        "READ_MEDIA_AUDIO"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#f6f5f0",
         "backgroundImage": "./assets/android-icon-background.png",
-        "foregroundImage": "./assets/android-icon-monochrome.png",
+        "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       }
     },

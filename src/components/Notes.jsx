@@ -13,17 +13,12 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Feather } from '@expo/vector-icons';
 
-import useCachedResource from '../hooks/useCachedResource';
-import { apiSend } from '../api/http';
-import { fetchResource, TTL } from '../api/resources';
+import useOfflineCollection, { isLocalId } from '../hooks/useOfflineCollection';
+import { TTL } from '../api/resources';
 
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL;
-const ENDPOINT = `${API_BASE}/api/node-matrix/`;
 const PIN_KEY = 'notes:pinned-ids';
 const WIDE_BREAKPOINT = 900;
-
-const DELETE_TIMEOUT = 90000;
 
 
 const C = {
@@ -51,40 +46,6 @@ const shadow = (h = 8, o = 0.14, r = 20) => Platform.select({
   android: { elevation: Math.round(h * 1.2) },
   default: {},
 });
-
-
-async function deleteNote(url, attempts = 2) {
-  let lastErr;
-  for (let i = 0; i < attempts; i++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), DELETE_TIMEOUT);
-    try {
-      const res = await fetch(url, { method: 'DELETE', signal: controller.signal });
-      clearTimeout(timer);
-      if (!res.ok && res.status >= 500 && i < attempts - 1) {
-        lastErr = new Error(`Server error ${res.status}`);
-        continue;
-      }
-      return res;
-    } catch (err) {
-      clearTimeout(timer);
-      lastErr = err;
-    }
-  }
-  throw lastErr || new Error('Delete failed');
-}
-
-async function noteStillExists(id) {
-  try {
-    const res = await fetch(ENDPOINT);
-    if (!res.ok) return true;
-    const list = await res.json();
-    return list.some((n) => n.id === id);
-  } catch {
-    return true;
-  }
-}
-
 
 
 const fmtDate = (iso) => {
@@ -279,16 +240,21 @@ export default function Notes() {
   const showLabels = width >= 640;
 
   const {
-    data: notes,
+    items: notes,
     loading,
     refreshing,
     errorText: fetchErr,
     refresh,
-    mutate,
-  } = useCachedResource('notes', () => fetchResource('notes'), {
+    isOnline,
+    pending,
+    create,
+    update,
+    remove,
+  } = useOfflineCollection('notes', {
     ttl: TTL.EDITABLE,
     initial: [],
-    errorMessage: 'Could not load notes. Check your connection.',
+    createPath: '/node-matrix/',
+    itemPath: (id) => `/node-matrix/${id}/`,
   });
 
   const [selectedId, setSelectedId] = useState(null);
@@ -354,19 +320,22 @@ export default function Notes() {
       draftCreatingRef.current = true;
       setSaveStatus('saving');
       try {
-        const created = await apiSend('/node-matrix/', 'POST', { emoji: '📝', title, text: body });
-        mutate((prev) => [created, ...(prev || [])]);
-        if (selectedIdRef.current === 'draft') setSelectedId(created.id);
+        // Optimistic + offline-queued inside: works with no connection.
+        const { data } = await create(
+          { emoji: '📝', title, text: body },
+          { optimistic: { emoji: '📝', title, text: body } },
+        );
+        if (selectedIdRef.current === 'draft') setSelectedId(data.id);
         setSaveStatus('saved');
         setSaveErr(null);
         draftCreatingRef.current = false;
         const queued = draftQueuedRef.current;
         draftQueuedRef.current = null;
-        if (queued !== null) return await commitSave(created.id, queued);
+        if (queued !== null) return await commitSave(data.id, queued);
         return true;
       } catch (e) {
         console.error('[Notes] create error:', e);
-        setSaveErr('Network error — not saved.');
+        setSaveErr(e?.message || 'Could not save note.');
         setSaveStatus('idle');
         draftCreatingRef.current = false;
         return false;
@@ -375,14 +344,14 @@ export default function Notes() {
 
     setSaveStatus('saving');
     try {
-      const updated = await apiSend(`/node-matrix/${id}/`, 'PATCH', { emoji: '📝', title, text: body });
-      mutate((prev) => (prev || []).map((n) => (n.id === id ? updated : n)));
+      // Local ids fold into the queued POST; server ids PATCH or queue.
+      await update(id, { emoji: '📝', title, text: body });
       setSaveStatus('saved');
       setSaveErr(null);
       return true;
     } catch (e) {
       console.error('[Notes] autosave error:', e);
-      setSaveErr('Network error — changes are not saved.');
+      setSaveErr(e?.message || 'Could not save note.');
       setSaveStatus('idle');
       return false;
     }
@@ -514,28 +483,23 @@ export default function Notes() {
       pendingRef.current = null;
     }
     setDeletingId(id);
-    let success = false;
     try {
-      const res = await deleteNote(`${ENDPOINT}${id}/`);
-      success = res.ok || res.status === 204 || res.status === 404;
-      if (!success) toast('Delete failed. Please try again.', true);
-    } catch (e) {
-      console.error('[Notes] delete error:', e);
-      success = !(await noteStillExists(id));
-      if (!success) toast('Network error — could not delete.', true);
-    }
-    if (success) {
-      mutate((prev) => (prev || []).filter((n) => n.id !== id));
+      const res = await remove(id);
       if (selectedIdRef.current === id) {
         setSelectedId(null);
         setContent('');
         setSaveStatus('idle');
         setSaveErr(null);
       }
-      toast('Note deleted');
+      toast(res?.offline ? 'Deleted on this device — will sync when online.' : 'Note deleted');
+      setDeletingId(null);
+      return true;
+    } catch (e) {
+      console.error('[Notes] delete error:', e);
+      setDeletingId(null);
+      toast(e?.message || 'Could not delete note.', true);
+      return false;
     }
-    setDeletingId(null);
-    return success;
   };
 
   const confirmDeleteNow = async () => {
@@ -556,21 +520,21 @@ export default function Notes() {
     if (!note) return;
     const ok = await flushPending();
     if (!ok) { toast("Couldn't save your last note — try again.", true); return; }
+    if (isLocalId(note.id)) { toast('Still syncing — duplicate it after the original syncs.', true); return; }
     try {
-      const created = await apiSend('/node-matrix/', 'POST', {
+      const { data, offline } = await create({
         emoji: '📝',
         title: `${note.title} copy`,
         text: note.text,
       });
-      mutate((prev) => [created, ...(prev || [])]);
       setMenuNote(null);
-      setSelectedId(created.id);
-      setContent(composeContent(created));
+      setSelectedId(data.id);
+      setContent(composeContent(data));
       setSaveStatus('idle');
-      toast('Note duplicated');
+      toast(offline ? 'Duplicated on this device — will sync when online.' : 'Note duplicated');
     } catch (e) {
       console.error('[Notes] duplicate error:', e);
-      toast('Network error — could not duplicate.', true);
+      toast(e?.message || 'Could not duplicate note.', true);
     }
   };
 
@@ -627,7 +591,10 @@ export default function Notes() {
         <View>
           <Text style={st.appName}>Notes</Text>
           {!loading && (
-            <Text style={st.appCount}>{notes.length} {notes.length === 1 ? 'note' : 'notes'}</Text>
+            <Text style={st.appCount}>
+              {notes.length} {notes.length === 1 ? 'note' : 'notes'}
+              {!isOnline ? ' · offline' : pending > 0 ? ` · ${pending} to sync` : ''}
+            </Text>
           )}
         </View>
         <Pressable
@@ -826,17 +793,16 @@ export default function Notes() {
         {showDetail && detail}
       </View>
 
-      {}
       <Modal
         visible={!!cmNote}
         transparent
         animationType={wide ? 'fade' : 'slide'}
         onRequestClose={() => setMenuNote(null)}
       >
-        <Pressable style={[st.overlay, !wide && { justifyContent: 'flex-end', padding: 0 }]} onPress={() => setMenuNote(null)}>
+        <View style={[st.overlay, !wide && { justifyContent: 'flex-end', padding: 0 }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuNote(null)} accessibilityLabel="Close menu" />
           {cmNote && (
-            <Pressable
-              onPress={() => {}}
+            <View
               style={[st.menu, wide ? st.menuCard : st.menuSheet]}
               accessibilityRole="menu"
             >
@@ -855,20 +821,20 @@ export default function Notes() {
               <View style={st.menuDivider} />
               <MenuItem icon="trash-2" label="Delete note" danger onPress={() => requestDelete(cmNote.id)} />
               {!wide && <View style={{ height: Platform.OS === 'ios' ? 18 : 6 }} />}
-            </Pressable>
+            </View>
           )}
-        </Pressable>
+        </View>
       </Modal>
 
-      {}
       <Modal
         visible={confirmDeleteId !== null}
         transparent
         animationType="fade"
         onRequestClose={() => { if (deletingId === null) cancelDelete(); }}
       >
-        <Pressable style={st.overlay} onPress={() => { if (deletingId === null) cancelDelete(); }}>
-          <Pressable onPress={() => {}} style={st.modalBox} accessibilityViewIsModal>
+        <View style={st.overlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => { if (deletingId === null) cancelDelete(); }} accessibilityLabel="Cancel delete" />
+          <View style={st.modalBox} accessibilityViewIsModal>
             <Text style={st.modalTitle}>Delete this note?</Text>
             <Text style={st.modalDesc}>This can't be undone. The note will be permanently removed.</Text>
             <View style={st.modalActions}>
@@ -891,11 +857,10 @@ export default function Notes() {
             {deletingId === confirmDeleteId && (
               <Text style={st.modalHint}>The server may take a moment to wake up.</Text>
             )}
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
-      {}
       <View pointerEvents="none" style={[st.toastWrap, wide ? { right: 24, alignItems: 'flex-end' } : { left: 16, right: 16, alignItems: 'center' }]}>
         {toasts.map((t) => <Toast key={t.id} msg={t.msg} err={t.err} />)}
       </View>

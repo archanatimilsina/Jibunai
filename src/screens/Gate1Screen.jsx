@@ -1,8 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { C, F } from '../theme';
+import { C, F, radii } from '../theme';
 import { validateRequired } from '../utils/validation';
 import { gate1 } from '../api/auth';
 
@@ -19,7 +19,8 @@ export default function Gate1Screen({ onSuccess, onRegister }) {
 
   const handleSubmit = useCallback(async () => {
     setError(null);
-    if (!validateRequired(username, 'Name')) {
+    const nameError = validateRequired(username, 'Name');
+    if (nameError) {
       setError('Please enter your name / username.');
       return;
     }
@@ -61,12 +62,10 @@ export default function Gate1Screen({ onSuccess, onRegister }) {
         </View>
 
         <View style={st.footer}>
-          <Text style={st.foot}>
-            Don't have an account?{' '}
-            <TouchableOpacity style={st.link} onPress={onRegister}>
-              <Text style={st.linkText}>Create account</Text>
-            </TouchableOpacity>
-          </Text>
+          <Text style={st.foot}>Don't have an account?</Text>
+          <TouchableOpacity style={st.link} onPress={onRegister} accessibilityRole="button" accessibilityLabel="Create account">
+            <Text style={st.linkText}>Create account</Text>
+          </TouchableOpacity>
           <Text style={st.foot}>Jibunai · yours, quietly</Text>
         </View>
       </View>
@@ -110,7 +109,7 @@ const st = StyleSheet.create({
     backgroundColor: C.white,
     borderWidth: 1,
     borderColor: C.border,
-    borderRadius: C.radii.md,
+    borderRadius: radii.md,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontFamily: F.sans,
@@ -126,7 +125,7 @@ const st = StyleSheet.create({
   },
   button: {
     backgroundColor: C.green,
-    borderRadius: C.radii.lg,
+    borderRadius: radii.lg,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 24,
