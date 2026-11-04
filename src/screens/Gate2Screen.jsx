@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F, radii } from '../theme';
 import { validateRequired } from '../utils/validation';
 import { gate2 } from '../api/auth';
+import { friendlyErrorMessage } from '../api/http';
 
 /**
  * Gate 2 — dream.
@@ -29,7 +30,7 @@ export default function Gate2Screen({ preauthToken, onSuccess, onBack }) {
       const res = await gate2(preauthToken, dream.trim());
       onSuccess(res?.preauth_token || preauthToken);
     } catch (err) {
-      setError(err.message || 'Invalid credentials. Try again.');
+      setError(friendlyErrorMessage(err, 'Invalid credentials. Try again.'));
     } finally {
       setSubmitting(false);
     }

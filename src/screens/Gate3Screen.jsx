@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F, radii } from '../theme';
 import { validateSecretCode } from '../utils/validation';
 import { gate3 } from '../api/auth';
+import { friendlyErrorMessage } from '../api/http';
 
 /**
  * Gate 3 — secret code (4-8 chars, any symbol/letter/number).
@@ -30,7 +31,7 @@ export default function Gate3Screen({ preauthToken, onSuccess, onBack }) {
       if (!auth_token) throw new Error('Invalid secret code. Try again.');
       await onSuccess(auth_token, user);
     } catch (err) {
-      setError(err.message || 'Invalid secret code. Try again.');
+      setError(friendlyErrorMessage(err, 'Invalid secret code. Try again.'));
     } finally {
       setSubmitting(false);
     }

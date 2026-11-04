@@ -11,6 +11,9 @@ const RAW_BASE = (process.env.EXPO_PUBLIC_API_URL || '').replace(/\/+$/, '');
 
 export const API_BASE = RAW_BASE ? `${RAW_BASE}/api` : '';
 
+/** Cheap liveness probe (200 + DB check). Use for connectivity, not bare `/api`. */
+export const HEALTH_PATH = '/health/';
+
 /** Read the stored auth token without throwing (missing/expired => null). */
 export async function getAuthToken() {
   try {
@@ -36,7 +39,9 @@ const assertBase = () => {
   }
 };
 
-const DEFAULT_TIMEOUT = 12_000;
+// Render's free tier sleeps: the first request after idle measured ~18 s.
+// Keep the default above that so a cold start reads as "slow", not "offline".
+const DEFAULT_TIMEOUT = 30_000;
 
 export class ApiError extends Error {
   constructor(message, status) {
@@ -44,6 +49,37 @@ export class ApiError extends Error {
     this.name = 'ApiError';
     this.status = status;
   }
+}
+
+const NETWORK_HINT = /network|fetch failed|failed to fetch|abort|timed?\s?out|econn|enot|eai_again|socket|unreachable|offline/i;
+
+/**
+ * User-facing message for any request failure — never technical.
+ * Show this in screens instead of `err.message`: raw failures like
+ * "fetch failed", "Aborted" or "Server error (500)" mean nothing to
+ * the user. Server/validation detail (400/401/403/404) passes through
+ * because it already reads like a sentence.
+ */
+export function friendlyErrorMessage(err, fallback = 'Something went wrong. Please try again.') {
+  if (err instanceof ApiError) {
+    if (!err.status) return err.message || fallback; // setup errors already explain themselves
+    if (err.status === 408 || err.status === 504) {
+      return 'The server is taking too long to respond. Try again in a moment.';
+    }
+    if (err.status === 429) return 'Too many attempts. Wait a moment and try again.';
+    if (err.status >= 500) {
+      return 'Something went wrong on the server. Please try again in a moment.';
+    }
+    return err.message || fallback;
+  }
+  const message = err?.message || '';
+  if (err?.name === 'AbortError' || /abort|timed?\s?out/i.test(message)) {
+    return 'The server is taking too long — it may be waking up. Try again in a moment.';
+  }
+  if (NETWORK_HINT.test(message) || err?.code) {
+    return "Couldn't reach the server. Check your internet connection and try again.";
+  }
+  return message || fallback;
 }
 
 const withTimeout = async (url, options, timeout, externalSignal) => {
@@ -129,7 +165,7 @@ export async function apiSend(
 }
 
 /** POST (or PATCH) a multipart payload (image uploads). */
-export async function apiUpload(path, formData, { timeout = 25_000, method = 'POST', headers = {} } = {}) {
+export async function apiUpload(path, formData, { timeout = 60_000, method = 'POST', headers = {} } = {}) {
   assertBase();
   const res = await withTimeout(
     `${API_BASE}${path}`,

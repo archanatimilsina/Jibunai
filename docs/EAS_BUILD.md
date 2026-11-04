@@ -54,3 +54,38 @@ npx expo start --dev-client
   out of scope until release; the `submit.production` stub is ready.
 - If a build ever behaves like an old version: `npx expo prebuild --clean`
   locally, confirm `npx expo-doctor` is green, rebuild.
+
+## EAS Update — build once, update over the air
+
+`expo-updates` is installed and wired (`app.json` → `updates.url` +
+`runtimeVersion: { policy: appVersion }`). Each build profile has a
+channel (`development` / `preview` / `production`), so a build pulls
+updates published to the branch of the same name.
+
+One-time native build (do this AFTER any native/plugin change):
+
+```bash
+eas build --platform android --profile preview      # testable APK
+eas build --platform android --profile production   # store build
+```
+
+Then ship JS-only changes with no rebuild:
+
+```bash
+npm run update:preview                 # or: eas update --branch preview -m "fix goals list"
+npm run update:production              # or: eas update --branch production -m "..."
+```
+
+The app checks for updates on launch (`ON_LOAD`) and applies them on
+next restart. Rules of thumb:
+
+- OTA covers JS, assets, and most config. It does NOT cover: new/changed
+  native modules or plugins, `app.json` plugin edits, splash/icon changes
+  that need native resources, or a bumped `version` (that changes the
+  runtime version, so republish the update after rebuilding).
+- `appVersionSource: remote` auto-bumps `version` per build — every fresh
+  native build is a new runtime version, so run the matching
+  `npm run update:<profile>` again after rebuilding.
+- `EXPO_PUBLIC_API_URL` is baked into the JS bundle: an update carries the
+  value from the machine that ran `eas update`. Changing the backend URL
+  for existing installs = publish an update, not a rebuild.

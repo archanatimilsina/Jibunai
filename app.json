@@ -45,7 +45,11 @@
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
         "SCHEDULE_EXACT_ALARM",
-        "READ_MEDIA_AUDIO"
+        "READ_MEDIA_AUDIO",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#f6f5f0",
@@ -57,11 +61,18 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "updates": {
+      "url": "https://u.expo.dev/0b664d10-21d0-44cf-a14b-8fb78a313e30",
+      "checkAutomatically": "ON_LOAD"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "extra": {
       "eas": {
-        "projectId": "bca138a4-72fd-498c-877c-e46ecb4f6d87"
+        "projectId": "0b664d10-21d0-44cf-a14b-8fb78a313e30"
       }
     },
-    "owner": "0727hannah"
+    "owner": "hanahhhh0727"
   }
 }

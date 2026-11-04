@@ -2,15 +2,15 @@
  * Connectivity tracking with a backend-reachability probe.
  *
  * NetInfo alone only tells us the radio is up — the Render backend sleeps on
- * the free tier, so we additionally probe the API base: any HTTP response
- * (even a 404) means "online", only a network-level failure means "offline".
+ * the free tier, so we additionally probe /api/health/: any HTTP response
+ * (even a 4xx/5xx) means "online", only a network-level failure means "offline".
  * Works with zero new native deps; if @react-native-community/netinfo is
  * installed it is used as the primary signal, otherwise we poll the probe.
  */
 import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 
-import { API_BASE } from './http';
+import { API_BASE, HEALTH_PATH } from './http';
 
 let NetInfo = null;
 try {
@@ -41,12 +41,14 @@ const setOnline = (next) => {
 };
 
 /** One-shot backend reachability check. Never throws. */
-export async function probeOnline({ timeout = 6000 } = {}) {
+export async function probeOnline({ timeout = 15_000 } = {}) {
   if (!API_BASE) return false;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
-    const res = await fetch(API_BASE, { method: 'GET', signal: controller.signal });
+    // /api/health/ is cheap (200 + DB check); bare /api has no route.
+    // Give Render's sleeping tier room to wake before calling us offline.
+    const res = await fetch(`${API_BASE}${HEALTH_PATH}`, { method: 'GET', signal: controller.signal });
     // Any HTTP status (200, 404, 401, …) proves the network path works.
     void res.status;
     setOnline(true);

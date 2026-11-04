@@ -13,6 +13,7 @@ import {
   validateSecretCode,
 } from '../utils/validation';
 import { register } from '../api/auth';
+import { friendlyErrorMessage } from '../api/http';
 
 /**
  * Sign-up screen.
@@ -84,7 +85,7 @@ export default function RegisterScreen({ onRegistered }) {
       });
       if (onRegistered) onRegistered(user);
     } catch (err) {
-      Alert.alert('Registration failed', err.message || 'Could not create account. Try again.');
+      Alert.alert('Registration failed', friendlyErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

@@ -72,8 +72,8 @@ export default function GoalsScreen() {
   } = useOfflineCollection('goals', {
     ttl: TTL.LIVE,
     initial: [],
-    createPath: '/goals/',
-    itemPath: (id) => `/goals/${id}/`,
+    createPath: '/Goals/',
+    itemPath: (id) => `/Goals/${id}/`,
   });
   const [isCreating, setIsCreating] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -113,7 +113,7 @@ export default function GoalsScreen() {
   const toggleDay = async (goal, dayNumber) => {
     setTogglingDay(`${goal.id}-${dayNumber}`); setError('');
     try {
-      await runCustom(`/goals/${goal.id}/days/${dayNumber}/toggle/`, 'PATCH', null, {
+      await runCustom(`/Goals/${goal.id}/days/${dayNumber}/toggle/`, 'PATCH', null, {
         updater: (prev) => (prev || []).map((g) => (
           g.id !== goal.id ? g : {
             ...g,
