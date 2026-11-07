@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { friendlyErrorMessage } from '../api/http';
 import {
   ensureFresh,
   getEntry,
@@ -120,7 +121,7 @@ export default function useCachedResource(key, fetcher, options = {}) {
     refreshing,
     error,
     // with a cached copy the message explains that the copy is being shown
-    errorText: error ? (hasCopy ? offlineMessage : errorMessage) : '',
+    errorText: error ? (hasCopy ? offlineMessage : friendlyErrorMessage(error, errorMessage)) : '',
     stale: !!error && hasCopy,
     lastUpdated: entry?.updatedAt || 0,
     refresh,
