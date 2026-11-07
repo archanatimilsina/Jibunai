@@ -13,7 +13,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "${{EXPO_PUBLIC_API_URL}}"
+        "EXPO_PUBLIC_API_URL": "https://portfolio-79vi.onrender.com"
       }
     },
     "preview": {
@@ -24,14 +24,14 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "${{EXPO_PUBLIC_API_URL}}"
+        "EXPO_PUBLIC_API_URL": "https://portfolio-79vi.onrender.com"
       }
     },
     "production": {
       "channel": "production",
       "environment": "production",
       "env": {
-        "EXPO_PUBLIC_API_URL": "${{EXPO_PUBLIC_API_URL}}"
+        "EXPO_PUBLIC_API_URL": "https://portfolio-79vi.onrender.com"
       }
     }
   },
