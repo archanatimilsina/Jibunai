@@ -9,8 +9,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 
 import { C, mono, radii, shadow } from '../theme';
-import useOfflineCollection from '../hooks/useOfflineCollection';
-import { TTL } from '../api/resources';
+import useLocalCollection from '../hooks/useLocalCollection';
 
 const pad = (n) => String(n).padStart(2, '0');
 const toISODate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -27,15 +26,10 @@ export default function TodaysTasks({ onNavigate }) {
   const {
     items: data,
     loading,
-    refreshing,
     errorText,
-    refresh,
     update,
-  } = useOfflineCollection('tasks', {
-    ttl: TTL.LIVE,
+  } = useLocalCollection('tasks', {
     initial: [],
-    createPath: '/tasks/',
-    itemPath: (id) => `/tasks/${id}/`,
   });
 
   const [busyId, setBusyId] = useState(null);

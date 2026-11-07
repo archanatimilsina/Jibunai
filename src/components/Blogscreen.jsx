@@ -10,12 +10,13 @@ import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import useCachedResource from '../hooks/useCachedResource';
+import { BREAKPOINTS } from '../utils/responsive';
 import { invalidatePrefix } from '../api/cache';
 import { apiGet, apiSend, apiUpload } from '../api/http';
 import { apiSendOffline, isRetryableError } from '../api/offlineSend';
 import { enqueueOp, mergeIntoQueuedCreate, mergeUploadIntoQueuedCreate, removeOpsForLocalId, subscribeOutbox } from '../api/outbox';
 import { stageFile } from '../api/fileQueue';
-import { isLocalId } from '../hooks/useOfflineCollection';
+import { isLocalId } from '../hooks/useLocalCollection';
 import { useOnlineStatus } from '../api/connectivity';
 import { TTL } from '../api/resources';
 
@@ -27,8 +28,8 @@ const DEFAULT_FILTER_SIGNATURE = 'all|all||newest';
 
 const C = {
   bg: '#f6f5f0', white: '#ffffff', dark: '#1a1a2e', green: '#2d6a4f', greenLt: '#e4f1ea',
-  border: '#d8d4cc', muted: '#eceae3', soft: '#7a7567', gold: '#d4af37', accent: '#52d68a',
-  danger: '#c0392b', dangerLt: '#fdecea', ph: '#bdb8ad',
+  border: '#d8d4cc', muted: '#eceae3', soft: '#5c574c', gold: '#d4af37', accent: '#52d68a',
+  danger: '#c0392b', dangerLt: '#fdecea', ph: '#6b665b',
 };
 const shadow = {
   shadowColor: '#1a1a2e', shadowOpacity: 0.08, shadowRadius: 14,
@@ -155,7 +156,7 @@ const IconBtn = ({ name, onPress, danger, size = 30 }) => (
 );
 const Chip = ({ label, active, onPress }) => (
   <Pressable onPress={onPress} style={[s.chip, active && { backgroundColor: C.green, borderColor: C.green }]}>
-    <Text style={[s.chipText, active && { color: '#fff' }]}>{label}</Text>
+    <Text style={[s.chipText, active && { color: '#fff' }]} maxFontSizeMultiplier={1.3}>{label}</Text>
   </Pressable>
 );
 const Meta = ({ icon, value, color = C.soft, fill }) => (
@@ -209,9 +210,9 @@ const Skeleton = ({ style }) => {
 
 export default function BlogScreen({ onBack }) {
   const { width } = useWindowDimensions();
-  const cols = width >= 1100 ? 3 : width >= 680 ? 2 : 1;
+  const cols = width >= BREAKPOINTS.wide ? 3 : width >= BREAKPOINTS.medium ? 2 : 1;
   const wide = width >= 900;
-  const pad = width >= 680 ? 28 : 16;
+  const pad = width >= BREAKPOINTS.medium ? 28 : 16;
 
   const [extra, setExtra] = useState([]);
   const [page, setPage] = useState(1);
@@ -344,7 +345,7 @@ export default function BlogScreen({ onBack }) {
       setExtra((prev) => [...prev, ...next.results]);
       setPage(page + 1);
     } catch {
-      toast('Could not load more posts.', true);
+      toast('Could not load more.');
     } finally {
       setLoadingMore(false);
     }
@@ -412,8 +413,7 @@ export default function BlogScreen({ onBack }) {
 
   const pickImage = async (aspect) => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { toast('Allow photo access to add images.', true); return null; }
-    const r = await ImagePicker.launchImageLibraryAsync({
+    if (!perm.granted) { toast('Allow photo access to add images.', true); return null; }    const r = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'], quality: 0.82, allowsEditing: !!aspect, aspect,
     });
     if (r.canceled || !r.assets?.[0]) return null;
@@ -569,7 +569,7 @@ export default function BlogScreen({ onBack }) {
       result = { ...(post || {}), ...optimistic };
     }
     setDirty(false); setCoverFile(null); setRemoveCover(false);
-    toast('Saved on this device — will sync when online.');
+    toast('Saved on this device.');
     return result;
   };
 
@@ -588,7 +588,7 @@ export default function BlogScreen({ onBack }) {
         : entry));
       refreshStats(); setConfirmDelete(null);
       if (activeId === id) closeEditor();
-      toast(wasOffline ? 'Deleted on this device — will sync.' : 'Post deleted');
+      toast(wasOffline ? 'Deleted on this device.' : 'Post deleted');
     };
     try {
       const { offline } = await apiSendOffline(`${POSTS}${id}/`, 'DELETE', null, { resourceKey: 'blogPosts', targetId: id });
@@ -640,7 +640,7 @@ export default function BlogScreen({ onBack }) {
         setComments((prev) => [...prev, optimistic]); setCommentBody('');
         patchPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, comment_count: (p.comment_count || 0) + 1 } : p)));
         await enqueueOp({ resourceKey: 'blogComments', method: 'POST', path: COMMENTS, body, localId }).catch(() => {});
-        toast('Comment saved on this device — will sync.');
+        toast('Comment saved on this device.');
       }
     } finally { setPostingComment(false); }
   };
@@ -651,7 +651,7 @@ export default function BlogScreen({ onBack }) {
     try {
       const { offline } = await apiSendOffline(`${COMMENTS}${id}/`, 'DELETE', null, { resourceKey: 'blogComments', targetId: id });
       patchPosts((prev) => prev.map((p) => (p.id === post?.id ? { ...p, comment_count: Math.max(0, (p.comment_count || 0) - 1) } : p)));
-      if (offline) toast('Comment removed on this device — will sync.');
+      if (offline) toast('Comment removed on this device.');
     } catch (err) {
       if (isLocalId(id)) {
         await removeOpsForLocalId(id).catch(() => {});
@@ -725,7 +725,7 @@ export default function BlogScreen({ onBack }) {
       <View style={[s.container, { paddingHorizontal: pad }]}>
         <View style={s.statsRow}>
           {[['Published', stats.published], ['Drafts', stats.drafts], ['Views', stats.views], ['Likes', stats.likes]].map(([l, n]) => (
-            <View key={l} style={[s.stat, { width: width >= 680 ? '24%' : '48.5%' }]}>
+            <View key={l} style={[s.stat, { width: width >= BREAKPOINTS.medium ? '24%' : '48.5%' }]}>
               <Text style={s.statNum}>{n}</Text><Text style={s.statLabel}>{l}</Text>
             </View>
           ))}
@@ -983,7 +983,7 @@ export default function BlogScreen({ onBack }) {
         <Pressable style={s.overlay} onPress={() => !deleting && setConfirmDelete(null)}>
           <Pressable style={s.modal} onPress={() => {}}>
             <Text style={s.modalTitle}>Delete this post?</Text>
-            <Text style={s.modalDesc}>“{confirmDelete?.title || 'Untitled'}” will be permanently removed along with its comments. This can't be undone.</Text>
+            <Text style={s.modalDesc}>“{confirmDelete?.title || 'Untitled'}” will be removed with its comments. This can't be undone.</Text>
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10 }}>
               <Btn variant="ghost" disabled={deleting} onPress={() => setConfirmDelete(null)}>Cancel</Btn>
               <Btn variant="danger" busy={deleting} onPress={() => deletePost(confirmDelete.id)}>{deleting ? 'Deleting…' : 'Delete'}</Btn>
@@ -1034,7 +1034,7 @@ const s = StyleSheet.create({
   countText: { fontSize: 11, fontWeight: '700', color: C.soft },
   searchWrap: { width: '100%', maxWidth: 1280, alignSelf: 'center', justifyContent: 'center' },
   searchIcon: { position: 'absolute', left: 13, zIndex: 1 },
-  searchInput: { backgroundColor: C.white, borderWidth: 1.5, borderColor: C.border, borderRadius: 100, paddingLeft: 38, paddingRight: 36, paddingVertical: Platform.OS === 'ios' ? 10 : 7, fontSize: 14, color: C.dark },
+  searchInput: { backgroundColor: C.white, borderWidth: 1.5, borderColor: C.border, borderRadius: 100, paddingLeft: 38, paddingRight: 36, paddingVertical: Platform.OS === 'ios' ? 10 : 7, fontSize: 16, color: C.dark },
   searchClear: { position: 'absolute', right: 13 },
 
   btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 10, paddingHorizontal: 15, borderRadius: 10, borderWidth: 1.5 },
@@ -1052,7 +1052,7 @@ const s = StyleSheet.create({
   chipText: { fontSize: 13, fontWeight: '700', color: C.soft },
   selects: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
 
-  input: { backgroundColor: C.white, borderWidth: 1.5, borderColor: C.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 11 : 8, fontSize: 14, color: C.dark },
+  input: { backgroundColor: C.white, borderWidth: 1.5, borderColor: C.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 11 : 8, fontSize: 16, color: C.dark },
   readonly: { backgroundColor: C.muted },
   pickerBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   textarea: { minHeight: 64, lineHeight: 21, textAlignVertical: 'top' },
@@ -1104,7 +1104,7 @@ const s = StyleSheet.create({
   mdBar: { borderWidth: 1.5, borderColor: C.border, backgroundColor: C.muted, borderRadius: 10, flexGrow: 0 },
   mdBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: C.white, borderWidth: 1.5, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
   mdBtnText: { fontSize: 13, fontWeight: '800', color: C.dark },
-  contentArea: { minHeight: 380, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white, borderRadius: 12, padding: 14, fontSize: 14.5, lineHeight: 24, color: C.dark, fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }) },
+  contentArea: { minHeight: 380, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white, borderRadius: 12, padding: 14, fontSize: 16, lineHeight: 24, color: C.dark, fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }) },
   preview: { minHeight: 380, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10 },
 
   side: { width: '100%', gap: 14 },

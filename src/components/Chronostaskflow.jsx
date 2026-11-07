@@ -13,8 +13,7 @@ import {
   Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold,
 } from '@expo-google-fonts/inter';
 
-import useOfflineCollection from '../hooks/useOfflineCollection';
-import { TTL } from '../api/resources';
+import useLocalCollection from '../hooks/useLocalCollection';
 
 const C = {
   bg: '#f6f5f0',
@@ -22,7 +21,7 @@ const C = {
   input: '#f0eee7',
   border: '#d8d4cc',
   text: '#1a1a2e',
-  textSecondary: '#7a7567',
+  textSecondary: '#5c574c',
   accent: '#2d6a4f',
   accentGlow: 'rgba(45,106,79,0.30)',
   danger: '#c0392b',
@@ -374,17 +373,11 @@ export default function ChronosTaskFlow() {
     items: allTasks,
     loading,
     errorText: loadError,
-    refresh,
-    isOnline,
-    pending,
     create,
     update,
     remove,
-  } = useOfflineCollection('tasks', {
-    ttl: TTL.LIVE,
+  } = useLocalCollection('tasks', {
     initial: [],
-    createPath: '/tasks/',
-    itemPath: (id) => `/tasks/${id}/`,
   });
   const [savingId, setSavingId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -483,7 +476,7 @@ export default function ChronosTaskFlow() {
     const dayTasks = allTasks.filter((t) => t.dueDate === dateStr);
     Alert.alert(
       'Delete this day?',
-      `All ${dayTasks.length} ${dayTasks.length === 1 ? 'task' : 'tasks'} on ${formatShortDate(dateStr)} will be removed.`,
+      `All ${dayTasks.length} task${dayTasks.length === 1 ? '' : 's'} on ${formatShortDate(dateStr)} will be removed.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete day', style: 'destructive', onPress: () => performDeleteDay(dateStr, dayTasks) },

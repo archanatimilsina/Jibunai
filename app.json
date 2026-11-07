@@ -46,11 +46,14 @@
         "VIBRATE",
         "SCHEDULE_EXACT_ALARM",
         "READ_MEDIA_AUDIO",
+        "POST_NOTIFICATIONS",
+        "BLUETOOTH_CONNECT",
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
+      "foregroundServiceType": "mediaPlayback",
       "adaptiveIcon": {
         "backgroundColor": "#f6f5f0",
         "backgroundImage": "./assets/android-icon-background.png",

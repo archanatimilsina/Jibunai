@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, F, radii } from '../theme';
@@ -22,7 +22,7 @@ export default function Gate1Screen({ onSuccess, onRegister }) {
     setError(null);
     const nameError = validateRequired(username, 'Name');
     if (nameError) {
-      setError('Please enter your name / username.');
+      setError('Enter your name / username.');
       return;
     }
     setSubmitting(true);
@@ -38,8 +38,9 @@ export default function Gate1Screen({ onSuccess, onRegister }) {
 
   return (
     <View style={[st.wrap, { paddingTop: insets.top }]}>
-      <View style={st.scroll}>
-        <View style={st.card}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={st.scroll}>
+          <View style={st.card}>
           <Text style={st.title}>Gate 1 of 3</Text>
           <Text style={st.subtitle}>Enter your name</Text>
 
@@ -69,7 +70,8 @@ export default function Gate1Screen({ onSuccess, onRegister }) {
           </TouchableOpacity>
           <Text style={st.foot}>Jibunai · yours, quietly</Text>
         </View>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -114,7 +116,7 @@ const st = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontFamily: F.sans,
-    fontSize: 15,
+    fontSize: 16,
     color: C.dark,
     marginTop: 4,
   },

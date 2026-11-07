@@ -6,9 +6,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { enableLayoutAnimation } from '../utils/layoutAnimation';
-import useOfflineCollection from '../hooks/useOfflineCollection';
-import { TTL } from '../api/resources';
+import useLocalCollection from '../hooks/useLocalCollection';
 import { C as TC, mono } from '../theme';
+import { BREAKPOINTS } from '../utils/responsive';
 
 enableLayoutAnimation();
 
@@ -80,8 +80,8 @@ function HobbyItem({ hobby, open, editing, editHobby, setEditHobby, updating, on
             <>
               <Text style={s.hobbyText}>{hobby.text}</Text>
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
-                <Pressable onPress={onEdit} style={s.ctrl} accessibilityLabel="Edit hobby"><Text style={{ fontSize: 13 }}>✏️</Text></Pressable>
-                <Pressable onPress={onDelete} style={[s.ctrl, { backgroundColor: C.dangerLt, borderColor: '#fecaca' }]} accessibilityLabel="Delete hobby">
+                <Pressable onPress={onEdit} hitSlop={8} style={s.ctrl} accessibilityLabel="Edit hobby"><Text style={{ fontSize: 13 }}>✏️</Text></Pressable>
+                <Pressable onPress={onDelete} hitSlop={8} style={[s.ctrl, { backgroundColor: C.dangerLt, borderColor: '#fecaca' }]} accessibilityLabel="Delete hobby">
                   <Text style={{ fontSize: 13, color: C.danger, fontWeight: '800' }}>✕</Text>
                 </Pressable>
               </View>
@@ -97,25 +97,18 @@ export default function HobbiesScreen() {
   const { width } = useWindowDimensions();
   const cols = width >= 900 ? 2 : 1;
   const stackForm = width < 768;
-  const stackHeader = width < 640;
+  const stackHeader = width < BREAKPOINTS.medium;
   const pad = width >= 768 ? 40 : 20;
 
   const {
     items: hobbies,
     loading,
-    refreshing,
     errorText: fetchError,
-    refresh,
-    isOnline,
-    pending,
     create,
     update,
     remove,
-  } = useOfflineCollection('hobbies', {
-    ttl: TTL.STATIC,
+  } = useLocalCollection('hobbies', {
     initial: [],
-    createPath: '/hobbies/',
-    itemPath: (id) => `/hobbies/${id}/`,
   });
   const [toast, setToast] = useState(null);
 
@@ -142,7 +135,7 @@ export default function HobbiesScreen() {
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
   const handleCreate = async () => {
-    if (!newHobby.title.trim() || !newHobby.text.trim()) { showToast('Add a title and a description.', 'error'); return; }
+    if (!newHobby.title.trim() || !newHobby.text.trim()) { showToast('Add title and description.', 'error'); return; }
     setCreating(true);
     try {
       const { data, offline } = await create({
@@ -154,7 +147,7 @@ export default function HobbiesScreen() {
       setOpenId(data.id);
       setNewHobby(EMPTY_FORM);
       setIsCreating(false);
-      showToast(offline ? 'Hobby saved on this device — will sync.' : 'Hobby added.');
+      showToast(offline ? 'Saved on this device.' : 'Added.');
     } catch (e) { showToast(e.message, 'error'); }
     finally { setCreating(false); }
   };
@@ -166,7 +159,7 @@ export default function HobbiesScreen() {
   };
 
   const handleUpdate = async (id) => {
-    if (!editHobby.title.trim() || !editHobby.text.trim()) { showToast('Add a title and a description.', 'error'); return; }
+    if (!editHobby.title.trim() || !editHobby.text.trim()) { showToast('Add title and description.', 'error'); return; }
     setUpdating(true);
     try {
       const { offline } = await update(id, {
@@ -176,7 +169,7 @@ export default function HobbiesScreen() {
       });
       anim();
       setEditingId(null);
-      showToast(offline ? 'Update saved on this device — will sync.' : 'Hobby updated.');
+      showToast(offline ? 'Saved on this device.' : 'Updated.');
     } catch (e) { showToast(e.message, 'error'); }
     finally { setUpdating(false); }
   };
@@ -186,10 +179,10 @@ export default function HobbiesScreen() {
       const { offline } = await remove(id);
       anim();
       if (openId === id) setOpenId(null);
-      showToast(offline ? 'Removed on this device — will sync.' : 'Hobby removed.');
+      showToast(offline ? 'Removed on this device.' : 'Removed.');
     } catch (e) { showToast(e.message, 'error'); }
   };
-  const handleDelete = (h) => Alert.alert('Remove this hobby permanently?', `“${h.title}” will be deleted.`, [
+  const handleDelete = (h) => Alert.alert('Remove this hobby?', `“${h.title}” will be deleted.`, [
     { text: 'Cancel', style: 'cancel' }, { text: 'Remove', style: 'destructive', onPress: () => deleteNow(h.id) },
   ]);
 
@@ -311,7 +304,7 @@ const s = StyleSheet.create({
   formBlock: { flexDirection: 'row', alignItems: 'flex-end', gap: 14, backgroundColor: C.muted, borderWidth: 1.5, borderColor: C.border, borderRadius: 16, padding: 20, marginBottom: 28 },
   fgroup: { gap: 6 },
   flabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: C.soft },
-  input: { backgroundColor: C.white, borderWidth: 1.5, borderColor: C.border, borderRadius: 10, paddingHorizontal: 13, paddingVertical: Platform.OS === 'ios' ? 12 : 9, fontSize: 15, color: C.dark },
+  input: { backgroundColor: C.white, borderWidth: 1.5, borderColor: C.border, borderRadius: 10, paddingHorizontal: 13, paddingVertical: Platform.OS === 'ios' ? 12 : 9, fontSize: 16, color: C.dark },
   multiline: { minHeight: 76, textAlignVertical: 'top', lineHeight: 22 },
 
   errBanner: { backgroundColor: C.dangerLt, borderWidth: 1, borderColor: '#fecaca', borderRadius: 10, padding: 14, marginBottom: 22 },

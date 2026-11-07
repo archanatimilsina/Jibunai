@@ -14,8 +14,8 @@ import {
 import { DMSans_400Regular, DMSans_500Medium } from '@expo-google-fonts/dm-sans';
 import { DMMono_400Regular, DMMono_500Medium } from '@expo-google-fonts/dm-mono';
 
-import useOfflineCollection from '../hooks/useOfflineCollection';
-import { TTL } from '../api/resources';
+import useLocalCollection from '../hooks/useLocalCollection';
+import { BREAKPOINTS } from '../utils/responsive';
 
 
 
@@ -27,7 +27,7 @@ const C = {
   greenDim: '#245741',
   greenLt: '#e4f1ea',
   dark: '#1a1a2e',
-  soft: '#7a7567',
+  soft: '#5c574c',
   muted: '#eceae3',
   danger: '#c0392b',
   dangerLt: '#fdecea',
@@ -319,7 +319,7 @@ export default function Wishlist() {
 
   const { width } = useWindowDimensions();
   const wide = width >= 768;
-  const stackHeader = width < 640;
+  const stackHeader = width < BREAKPOINTS.medium;
   const sidePad = wide ? 48 : 20;
   const contentWidth = Math.min(width, 1280) - sidePad * 2;
   const cols = Math.max(1, Math.floor((contentWidth + GAP) / (MIN_CARD + GAP)));
@@ -329,20 +329,12 @@ export default function Wishlist() {
   const {
     items: wishes,
     loading,
-    refreshing,
     errorText: fetchError,
-    refresh,
-    isOnline,
-    pending,
     create,
     update,
     remove,
-  } = useOfflineCollection('wishes', {
-    ttl: TTL.STATIC,
+  } = useLocalCollection('wishes', {
     initial: [],
-    createPath: '/wishes/',
-    itemPath: (id) => `/wishes/${id}/`,
-    updateMethod: 'PUT',
   });
   const [toast, setToast] = useState(null);
 
@@ -372,7 +364,7 @@ export default function Wishlist() {
       });
       setNewWish(EMPTY_NEW);
       setIsCreating(false);
-      showToast(offline ? 'Wish saved on this device — will sync when online.' : 'Wish added ✨');
+      showToast(offline ? 'Saved on this device.' : 'Added.');
     } catch (err) {
       showToast(err.message || 'Failed to save.', 'error');
     } finally {
@@ -396,7 +388,7 @@ export default function Wishlist() {
         wish: editWish.wish.trim(),
       });
       setEditingId(null);
-      showToast(offline ? 'Update saved on this device — will sync.' : 'Wish updated.');
+      showToast(offline ? 'Saved on this device.' : 'Updated.');
     } catch (err) {
       showToast(err.message || 'Update failed.', 'error');
     } finally {
@@ -407,7 +399,7 @@ export default function Wishlist() {
   const performDelete = useCallback(async (id) => {
     try {
       const { offline } = await remove(id);
-      showToast(offline ? 'Removed on this device — will sync.' : 'Wish removed.');
+      showToast(offline ? 'Removed on this device.' : 'Removed.');
     } catch (err) {
       showToast(err.message || 'Delete failed.', 'error');
     }
@@ -599,7 +591,7 @@ const st = StyleSheet.create({
   input: {
     backgroundColor: C.white, borderWidth: 1.5, borderColor: C.border, borderRadius: 10,
     paddingHorizontal: 13, paddingVertical: Platform.OS === 'ios' ? 12 : 9,
-    fontFamily: F.sans, fontSize: 15, color: C.dark,
+    fontFamily: F.sans, fontSize: 16, color: C.dark,
   },
 
   formBlock: {

@@ -18,7 +18,7 @@ GATE2_SALT = 'jibunai-preauth2'
 AUTH_SALT = 'jibunai-auth'
 PREAUTH_MAX_AGE = 600
 GATE2_MAX_AGE = 600
-AUTH_MAX_AGE = 30 * 24 * 3600
+AUTH_MAX_AGE = 90 * 24 * 3600  # 90 days — mobile sessions stay logged in longer
 
 
 class JibunaiUser:

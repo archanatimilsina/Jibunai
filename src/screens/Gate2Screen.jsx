@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, F, radii } from '../theme';
@@ -22,13 +22,13 @@ export default function Gate2Screen({ preauthToken, onSuccess, onBack }) {
     setError(null);
     const dreamError = validateRequired(dream, 'Dream');
     if (dreamError) {
-      setError('Please enter your dream.');
+      setError('Enter your dream.');
       return;
     }
     setSubmitting(true);
     try {
       const res = await gate2(preauthToken, dream.trim());
-      onSuccess(res?.preauth_token || preauthToken);
+      onSuccess(res?.preauth_token || preauthToken, dream.trim());
     } catch (err) {
       setError(friendlyErrorMessage(err, 'Invalid credentials. Try again.'));
     } finally {
@@ -38,8 +38,9 @@ export default function Gate2Screen({ preauthToken, onSuccess, onBack }) {
 
   return (
     <View style={[st.wrap, { paddingTop: insets.top }]}>
-      <View style={st.scroll}>
-        <View style={st.card}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={st.scroll}>
+          <View style={st.card}>
           <Text style={st.title}>Gate 2 of 3</Text>
           <Text style={st.subtitle}>Enter your dream</Text>
 
@@ -68,7 +69,8 @@ export default function Gate2Screen({ preauthToken, onSuccess, onBack }) {
           </TouchableOpacity>
           <Text style={st.foot}>Jibunai · yours, quietly</Text>
         </View>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -113,7 +115,7 @@ const st = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontFamily: F.sans,
-    fontSize: 15,
+    fontSize: 16,
     color: C.dark,
     marginTop: 4,
   },

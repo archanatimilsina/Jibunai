@@ -13,8 +13,8 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Feather } from '@expo/vector-icons';
 
-import useOfflineCollection, { isLocalId } from '../hooks/useOfflineCollection';
-import { TTL } from '../api/resources';
+import useLocalCollection, { isLocalId } from '../hooks/useLocalCollection';
+import { BREAKPOINTS } from '../utils/responsive';
 
 
 const PIN_KEY = 'notes:pinned-ids';
@@ -27,8 +27,8 @@ const C = {
   border: '#d8d4cc',
   borderSoft: '#e5e1d8',
   text: '#1a1a2e',
-  muted: '#7a7567',
-  dimmer: '#a8a396',
+  muted: '#5c574c',
+  dimmer: '#6b665b',
   accent: '#2d6a4f',
   accentDim: '#245741',
   accentSoft: 'rgba(45,106,79,0.10)',
@@ -237,7 +237,7 @@ function MenuItem({ icon, label, onPress, danger }) {
 export default function Notes() {
   const { width } = useWindowDimensions();
   const wide = width >= WIDE_BREAKPOINT;
-  const showLabels = width >= 640;
+  const showLabels = width >= BREAKPOINTS.medium;
 
   const {
     items: notes,
@@ -250,11 +250,8 @@ export default function Notes() {
     create,
     update,
     remove,
-  } = useOfflineCollection('notes', {
-    ttl: TTL.EDITABLE,
+  } = useLocalCollection('notes', {
     initial: [],
-    createPath: '/node-matrix/',
-    itemPath: (id) => `/node-matrix/${id}/`,
   });
 
   const [selectedId, setSelectedId] = useState(null);
@@ -395,7 +392,7 @@ export default function Notes() {
   const selectNote = async (item) => {
     if (selectedId === item.id) return;
     const ok = await flushPending();
-    if (!ok) { toast("Couldn't save your last note — staying here so nothing is lost.", true); return; }
+    if (!ok) { toast('Could not save note.', true); return; }
     setMenuNote(null);
     setSelectedId(item.id);
     setContent(composeContent(item));
@@ -406,7 +403,7 @@ export default function Notes() {
 
   const startCreate = async () => {
     const ok = await flushPending();
-    if (!ok) { toast("Couldn't save your last note — staying here so nothing is lost.", true); return; }
+    if (!ok) { toast('Could not save note.', true); return; }
     setMenuNote(null);
     setSelectedId('draft');
     setContent('');
@@ -418,7 +415,7 @@ export default function Notes() {
   const handleBack = async () => {
     Keyboard.dismiss();
     const ok = await flushPending();
-    if (!ok) { toast("Couldn't save — staying here so nothing is lost.", true); return; }
+    if (!ok) { toast('Could not save note.', true); return; }
     setSelectedId(null);
     setContent('');
   };
@@ -491,13 +488,13 @@ export default function Notes() {
         setSaveStatus('idle');
         setSaveErr(null);
       }
-      toast(res?.offline ? 'Deleted on this device — will sync when online.' : 'Note deleted');
+      toast(res?.offline ? 'Deleted on this device.' : 'Note deleted');
       setDeletingId(null);
       return true;
     } catch (e) {
       console.error('[Notes] delete error:', e);
       setDeletingId(null);
-      toast(e?.message || 'Could not delete note.', true);
+      toast(e?.message || 'Delete failed.', true);
       return false;
     }
   };
@@ -520,7 +517,7 @@ export default function Notes() {
     if (!note) return;
     const ok = await flushPending();
     if (!ok) { toast("Couldn't save your last note — try again.", true); return; }
-    if (isLocalId(note.id)) { toast('Still syncing — duplicate it after the original syncs.', true); return; }
+    if (isLocalId(note.id)) return;
     try {
       const { data, offline } = await create({
         emoji: '📝',
@@ -531,7 +528,7 @@ export default function Notes() {
       setSelectedId(data.id);
       setContent(composeContent(data));
       setSaveStatus('idle');
-      toast(offline ? 'Duplicated on this device — will sync when online.' : 'Note duplicated');
+      toast(offline ? 'Duplicated on this device.' : 'Note duplicated');
     } catch (e) {
       console.error('[Notes] duplicate error:', e);
       toast(e?.message || 'Could not duplicate note.', true);
@@ -593,7 +590,6 @@ export default function Notes() {
           {!loading && (
             <Text style={st.appCount}>
               {notes.length} {notes.length === 1 ? 'note' : 'notes'}
-              {!isOnline ? ' · offline' : pending > 0 ? ` · ${pending} to sync` : ''}
             </Text>
           )}
         </View>
@@ -640,7 +636,7 @@ export default function Notes() {
               onPress={() => setFilter(key)}
               style={[st.chip, active && st.chipActive]}
             >
-              <Text style={[st.chipText, active && { color: C.white }]}>{label}</Text>
+              <Text style={[st.chipText, active && { color: C.white }]} maxFontSizeMultiplier={1.3}>{label}</Text>
             </Pressable>
           );
         })}
@@ -836,7 +832,7 @@ export default function Notes() {
           <Pressable style={StyleSheet.absoluteFill} onPress={() => { if (deletingId === null) cancelDelete(); }} accessibilityLabel="Cancel delete" />
           <View style={st.modalBox} accessibilityViewIsModal>
             <Text style={st.modalTitle}>Delete this note?</Text>
-            <Text style={st.modalDesc}>This can't be undone. The note will be permanently removed.</Text>
+            <Text style={st.modalDesc}>This can't be undone.</Text>
             <View style={st.modalActions}>
               <Pressable
                 onPress={cancelDelete}
@@ -894,7 +890,7 @@ const st = StyleSheet.create({
   searchInput: {
     backgroundColor: C.white, borderWidth: 1, borderColor: C.border, borderRadius: R.sm,
     paddingVertical: Platform.OS === 'ios' ? 10 : 7, paddingLeft: 36, paddingRight: 34,
-    fontSize: 14.5, color: C.text,
+    fontSize: 16, color: C.text,
   },
   searchClear: { position: 'absolute', right: 10, padding: 4 },
 

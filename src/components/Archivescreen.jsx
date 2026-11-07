@@ -9,12 +9,12 @@ import * as MediaLibrary from 'expo-media-library';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Eye, Pencil, Trash2, Download, X, ChevronLeft, ChevronRight, Plus } from 'lucide-react-native';
 
-import useOfflineCollection from '../hooks/useOfflineCollection';
-import { TTL } from '../api/resources';
+import useLocalCollection from '../hooks/useLocalCollection';
+import { BREAKPOINTS } from '../utils/responsive';
 
 const C = {
-  dark: '#1a1a2e', soft: '#7a7567', border: '#d8d4cc', accent: '#eceae3', green: '#2d6a4f',
-  greenDim: '#245741', danger: '#c0392b', white: '#ffffff', bg: '#f6f5f0', stamp: '#b0a898',
+  dark: '#1a1a2e', soft: '#5c574c', border: '#d8d4cc', accent: '#eceae3', green: '#2d6a4f',
+  greenDim: '#245741', danger: '#c0392b', white: '#ffffff', bg: '#f6f5f0', stamp: '#6b665b',
 };
 const EMPTY_FORM = { title: '', remoteUrl: '', source: 'remote', file: null, previewUrl: '' };
 
@@ -75,7 +75,7 @@ function MemoryCard({ stamp, onEdit, onDelete, onPreview, deleting }) {
 function Slide({ stamp, width }) {
   const [status, setStatus] = useState('loading');
   return (
-    <View style={{ width, flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: width >= 700 ? 72 : 12 }}>
+    <View style={{ width, flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: width >= BREAKPOINTS.medium ? 72 : 12 }}>
       {stamp.image && status !== 'failed' && (
         <Image
           source={{ uri: stamp.image }} resizeMode="contain"
@@ -118,11 +118,11 @@ function Lightbox({ stamps, startIndex, onClose, onDownload, downloadingId }) {
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Pressable onPress={() => onDownload(stamp)} disabled={downloading} style={[s.lbBtn, { backgroundColor: C.green, borderColor: C.green }, downloading && { opacity: 0.55 }]}>
               {downloading ? <Spinner /> : <Download size={15} color="#fff" />}
-              {width >= 620 && <Text style={s.lbBtnText}>Save</Text>}
+              {width >= BREAKPOINTS.medium && <Text style={s.lbBtnText}>Save</Text>}
             </Pressable>
             <Pressable onPress={onClose} style={s.lbBtn} accessibilityLabel="Close preview">
               <X size={16} color="#fff" />
-              {width >= 620 && <Text style={s.lbBtnText}>Close</Text>}
+              {width >= BREAKPOINTS.medium && <Text style={s.lbBtnText}>Close</Text>}
             </Pressable>
           </View>
         </View>
@@ -135,14 +135,14 @@ function Lightbox({ stamps, startIndex, onClose, onDownload, downloadingId }) {
             onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / width))}
             renderItem={({ item }) => <Slide stamp={item} width={width} />}
           />
-          {stamps.length > 1 && width >= 620 && (
+          {stamps.length > 1 && width >= BREAKPOINTS.medium && (
             <>
               <Pressable onPress={() => goTo(index - 1)} style={[s.nav, { left: 14 }]} accessibilityLabel="Previous image"><ChevronLeft size={22} color="#fff" /></Pressable>
               <Pressable onPress={() => goTo(index + 1)} style={[s.nav, { right: 14 }]} accessibilityLabel="Next image"><ChevronRight size={22} color="#fff" /></Pressable>
             </>
           )}
         </View>
-        <Text style={s.lbCaption}>{width >= 620 ? 'Use ‹ › to move between images' : 'Swipe to move between images'}</Text>
+        <Text style={s.lbCaption}>{width >= BREAKPOINTS.medium ? 'Use ‹ › to move between images' : 'Swipe to move between images'}</Text>
       </SafeAreaView>
     </Modal>
   );
@@ -150,8 +150,8 @@ function Lightbox({ stamps, startIndex, onClose, onDownload, downloadingId }) {
 
 export default function ArchiveScreen() {
   const { width } = useWindowDimensions();
-  const cols = width >= 1024 ? 3 : width >= 580 ? 2 : 1;
-  const pad = width >= 700 ? 32 : 18;
+  const cols = width >= BREAKPOINTS.wide ? 3 : width >= BREAKPOINTS.medium ? 2 : 1;
+  const pad = width >= BREAKPOINTS.medium ? 32 : 18;
 
   const {
     items: stamps,
@@ -166,12 +166,8 @@ export default function ArchiveScreen() {
     update,
     updateWithFile,
     remove,
-  } = useOfflineCollection('archive', {
-    ttl: TTL.STATIC,
+  } = useLocalCollection('archive', {
     initial: [],
-    createPath: '/archive/',
-    itemPath: (id) => `/archive/${id}/`,
-    imageField: 'image',
   });
 
   const [modal, setModal] = useState(false);
@@ -216,7 +212,7 @@ export default function ArchiveScreen() {
   const handleCreate = async () => {
     if (!form.title.trim()) { setFormErr('Title is required.'); return; }
     if (form.source === 'local' && !form.file) { setFormErr('Please select an image file.'); return; }
-    if (form.source === 'remote' && !form.remoteUrl.trim()) { setFormErr('Please enter a remote image URL.'); return; }
+    if (form.source === 'remote' && !form.remoteUrl.trim()) { setFormErr('Enter remote image URL.'); return; }
     setSubmitting(true); setFormErr(null);
     try {
       const { offline } = form.source === 'local'
@@ -230,7 +226,7 @@ export default function ArchiveScreen() {
             url: form.remoteUrl.trim(),
           });
       closeModal();
-      toast(offline ? 'Memory saved on this device — will sync.' : 'Memory archived ✓');
+      toast(offline ? 'Saved on this device.' : 'Archived.');
     } catch (e) { setFormErr(e?.message || 'Could not save. Check your connection and try again.'); }
     finally { setSubmitting(false); }
   };
@@ -253,8 +249,8 @@ export default function ArchiveScreen() {
             })
           : await update(editing.id, { title: form.title.trim() });
       closeModal();
-      toast(offline ? 'Update saved on this device — will sync.' : 'Memory updated ✓');
-    } catch (e) { setFormErr(e?.message || 'Could not save. Check your connection and try again.'); }
+      toast(offline ? 'Saved on this device.' : 'Updated.');
+    } catch (e) { setFormErr(e?.message || 'Save failed.'); }
     finally { setSubmitting(false); }
   };
 
@@ -262,11 +258,11 @@ export default function ArchiveScreen() {
     setDeletingId(id);
     try {
       const { offline } = await remove(id);
-      toast(offline ? 'Removed on this device — will sync.' : 'Memory removed');
-    } catch (e) { toast(e?.message || 'Could not delete.', true); }
+      toast(offline ? 'Removed on this device.' : 'Removed.');
+    } catch (e) { toast(e?.message || 'Delete failed.', true); }
     finally { setDeletingId(null); }
   };
-  const handleDelete = (st) => Alert.alert('Remove this memory?', `“${st.title}” will be permanently removed.`, [
+  const handleDelete = (st) => Alert.alert('Remove this memory?', `“${st.title}” will be deleted.`, [
     { text: 'Keep it', style: 'cancel' }, { text: 'Remove', style: 'destructive', onPress: () => deleteNow(st.id) },
   ]);
 
@@ -309,7 +305,7 @@ export default function ArchiveScreen() {
             <View style={s.labelRow}>
               <View style={s.rule} /><Text style={s.label}>PERSONAL ARCHIVE</Text><View style={s.rule} />
             </View>
-            <Text style={[s.heroTitle, { fontSize: width >= 700 ? 60 : 42 }]}>
+            <Text style={[s.heroTitle, { fontSize: width >= BREAKPOINTS.wide ? 60 : 42 }]}>
               Visual <Text style={s.em}>Scrapbook</Text>
             </Text>
             <Text style={s.heroDesc}>
@@ -490,7 +486,7 @@ const s = StyleSheet.create({
   modalTitle: { fontSize: 22, fontWeight: '800', letterSpacing: -0.8, color: C.dark, textAlign: 'center', marginBottom: 26, paddingHorizontal: 24 },
   fgroup: { gap: 8, marginBottom: 20 },
   flabel: { fontSize: 11.5, fontWeight: '800', letterSpacing: 2, color: C.soft },
-  finput: { borderWidth: 1, borderColor: C.border, borderRadius: 7, backgroundColor: C.white, paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 13 : 10, fontSize: 15, color: C.dark },
+  finput: { borderWidth: 1, borderColor: C.border, borderRadius: 7, backgroundColor: C.white, paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 13 : 10, fontSize: 16, color: C.dark },
   srcBtn: { borderWidth: 1.5, borderColor: C.border, borderRadius: 6, paddingVertical: 9, paddingHorizontal: 16 },
   srcText: { fontSize: 12.5, fontWeight: '800', color: C.soft },
   uploadBtn: { borderWidth: 1, borderColor: C.border, borderRadius: 6, backgroundColor: C.white, paddingVertical: 12, paddingHorizontal: 18 },

@@ -3,18 +3,43 @@ import { Platform } from 'react-native';
 export const C = {
   bg: '#f6f5f0',
   surface: '#ffffff',
-  surfaceAlt: '#fbfaf7',
+  surfaceAlt: '#efede4',
   dark: '#1a1a2e',
-  ink: '#2b2b3a',
+  ink: '#1a1a2e',
   green: '#2d6a4f',
+  greenDark: '#245741',
   greenLt: '#e4f1ea',
-  soft: '#7a7567',
+  soft: '#5c574c',
   muted: '#eceae3',
   border: '#d8d4cc',
   borderLt: '#e8e5dd',
   white: '#ffffff',
   danger: '#c0392b',
-  ph: '#bdb8ad',
+  ph: '#6b665b',
+};
+
+/** DESIGN.md tokens — single source of truth for the UI-only redesign. Mirrors the front matter in DESIGN.md. Logic reads C/F/radii/shadow; new code should read TOKENS. */
+export const TOKENS = {
+  colors: {
+    primary: '#2D6A4F',
+    primaryDark: '#245741',
+    secondary: '#1A1A2E',
+    tertiary: '#E4F1EA',
+    neutral: '#5C574C',
+    surface: '#FFFFFF',
+    surfaceAlt: '#EFEDE4',
+    onSurface: '#1A1A2E',
+    onPrimary: '#FFFFFF',
+    onSecondary: '#FFFFFF',
+    onTertiary: '#1A1A2E',
+    error: '#C0392B',
+    onError: '#FFFFFF',
+    success: '#2D6A4F',
+    onSuccess: '#FFFFFF',
+    border: '#D8D4CC',
+    muted: '#ECEAE3',
+  },
+  spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, xxl: 48 },
 };
 
 export const shadow = (level = 1) => ({

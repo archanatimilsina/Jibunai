@@ -7,6 +7,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -361,7 +362,8 @@ export default function DateKeeperScreen() {
         <View style={st.overlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => !saving && setEditor(null)} accessibilityLabel="Close editor" />
           <View style={st.modal}>
-            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <Text style={st.modalTitle}>{editor?.mode === 'new' ? 'New date' : 'Edit date'}</Text>
 
               <Text style={st.flabel}>TITLE</Text>
@@ -460,6 +462,7 @@ export default function DateKeeperScreen() {
                 </Pressable>
               </View>
             </ScrollView>
+            </KeyboardAvoidingView>
           </View>
         </View>
       </Modal>
@@ -493,7 +496,7 @@ const st = StyleSheet.create({
   searchIcon: { position: 'absolute', left: 12, zIndex: 1 },
   searchInput: {
     backgroundColor: '#fff', borderWidth: 1, borderColor: '#e4e0d6', borderRadius: 10,
-    paddingVertical: 10, paddingLeft: 36, paddingRight: 34, fontSize: 14.5, color: '#1a1a2e',
+    paddingVertical: 10, paddingLeft: 36, paddingRight: 34, fontSize: 16, color: '#1a1a2e',
   },
   searchClear: { position: 'absolute', right: 10, padding: 4 },
   chips: { marginBottom: 12, flexGrow: 0 },
@@ -549,7 +552,7 @@ const st = StyleSheet.create({
     backgroundColor: '#f6f5f0', borderWidth: 1.5, borderColor: '#e4e0d6',
     borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11,
   },
-  inputText: { fontSize: 15, color: '#1a1a2e', fontWeight: '600' },
+  inputText: { fontSize: 16, color: '#1a1a2e', fontWeight: '600' },
   kindRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   kind: {
     flexDirection: 'row', alignItems: 'center', gap: 5,

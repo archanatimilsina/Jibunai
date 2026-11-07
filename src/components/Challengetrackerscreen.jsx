@@ -13,8 +13,8 @@ import {
 } from 'lucide-react-native';
 
 import { enableLayoutAnimation } from '../utils/layoutAnimation';
-import useOfflineCollection from '../hooks/useOfflineCollection';
-import { TTL } from '../api/resources';
+import useLocalCollection from '../hooks/useLocalCollection';
+import { BREAKPOINTS } from '../utils/responsive';
 
 enableLayoutAnimation();
 
@@ -48,7 +48,7 @@ const isEditable = (iso) => iso === todayISO();
 
 const C = {
   bg: '#f6f5f0', card: '#ffffff', border: '#d8d4cc', borderStrong: '#c3bdb0', text: '#1a1a2e',
-  muted: '#7a7567', soft: '#a8a396', green: '#2d6a4f', greenDark: '#245741', greenLt: '#e4f1ea',
+  muted: '#5c574c', soft: '#6b665b', green: '#2d6a4f', greenDark: '#245741', greenLt: '#e4f1ea',
   amber: '#d4af37', amberLt: '#fdf6dc', danger: '#c0392b', dangerLt: '#fdecea', fieldBg: '#f1efe8',
   flame: '#ea580c',
 };
@@ -250,7 +250,7 @@ function InstantControls({ status, onChange }) {
 
 function ChallengeCard({ challenge, onToggleDay, onSetInstantStatus, onEdit, onDelete, onBadge }) {
   const { width } = useWindowDimensions();
-  const wide = width >= 640;
+  const wide = width >= BREAKPOINTS.medium;
   const [expanded, setExpanded] = useState(false);
 
   const stats = useMemo(() => {
@@ -367,26 +367,19 @@ const BadgeArt = React.forwardRef(({ data }, ref) => (
 
 export default function ChallengeTrackerScreen() {
   const { width } = useWindowDimensions();
-  const pad = width >= 640 ? 24 : 16;
+  const pad = width >= BREAKPOINTS.medium ? 24 : 16;
 
   const [actionError, setActionError] = useState('');
   const {
     items: rawChallenges,
     loading,
-    refreshing,
     errorText: loadError,
-    refresh,
-    pending,
-    isOnline,
     create,
     update,
     remove,
     runCustom,
-  } = useOfflineCollection('challenges', {
-    ttl: TTL.LIVE,
+  } = useLocalCollection('challenges', {
     initial: [],
-    createPath: '/challenges/',
-    itemPath: (id) => `/challenges/${id}/`,
   });
   const challenges = useMemo(() => (rawChallenges || []).map(transformChallenge), [rawChallenges]);
   const [showForm, setShowForm] = useState(false);
@@ -423,7 +416,7 @@ export default function ChallengeTrackerScreen() {
       const { offline } = await remove(id);
       if (offline) setActionError('');
       if (editingChallenge?.id === id) cancelForm();
-    } catch (e) { fail('Could not delete challenge', e); }
+    } catch (e) { fail('Delete failed', e); }
   };
   const handleDelete = (id) => Alert.alert('Delete this challenge?', 'This cannot be undone.', [
     { text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => deleteNow(id) },
@@ -452,7 +445,7 @@ export default function ChallengeTrackerScreen() {
         targetId: id,
       });
       if (offline) setActionError('');
-    } catch (e) { fail('Could not update status', e); }
+    } catch (e) { fail('Update failed', e); }
   };
 
   useEffect(() => {
@@ -464,7 +457,7 @@ export default function ChallengeTrackerScreen() {
         if (alive && (await Sharing.isAvailableAsync())) {
           await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share your badge' });
         } else if (alive) setActionError('Sharing is not available on this device.');
-      } catch (e) { if (alive) fail('Could not create badge', e); }
+      } catch (e) { if (alive) fail('Create failed', e); }
       finally { if (alive) setBadgeData(null); }
     }, 120);
     return () => { alive = false; clearTimeout(t); };
@@ -570,7 +563,7 @@ const s = StyleSheet.create({
   formCard: { backgroundColor: C.card, borderWidth: 1.5, borderColor: C.border, borderRadius: 16, padding: 20, marginBottom: 22 },
   field: { marginBottom: 16 },
   label: { fontSize: 11.5, fontWeight: '700', letterSpacing: 0.8, color: C.soft, marginBottom: 6, textTransform: 'uppercase' },
-  input: { backgroundColor: C.fieldBg, borderWidth: 1.5, borderColor: C.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 12 : 9, fontSize: 14, color: C.text },
+  input: { backgroundColor: C.fieldBg, borderWidth: 1.5, borderColor: C.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 12 : 9, fontSize: 16, color: C.text },
   dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   typeBtn: { flex: 1, borderRadius: 10, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.fieldBg, paddingVertical: 11, alignItems: 'center' },
   typeBtnOn: { borderColor: C.green, backgroundColor: C.greenLt },

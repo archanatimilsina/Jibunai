@@ -1,18 +1,26 @@
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, F, radii } from '../theme';
 import { validateSecretCode } from '../utils/validation';
-import { gate3 } from '../api/auth';
+import {
+  gate3,
+  verifyOfflineCredentials,
+  makeLocalToken,
+  cacheOfflineCredentials,
+} from '../api/auth';
 import { friendlyErrorMessage } from '../api/http';
 
 /**
  * Gate 3 — secret code (4-8 chars, any symbol/letter/number).
  * Requires a valid pre-auth token from Gate 2. On success the server
  * issues the long-lived auth token and the user is fully authenticated.
+ * When the server is unreachable, falls back to locally cached credentials
+ * (stored after the first successful online login) so the user can still
+ * log in offline — the music player and everything else stay fully local.
  */
-export default function Gate3Screen({ preauthToken, onSuccess, onBack }) {
+export default function Gate3Screen({ preauthToken, dream, onSuccess, onBack }) {
   const insets = useSafeAreaInsets();
   const [secretCode, setSecretCode] = useState('');
   const [error, setError] = useState(null);
@@ -29,18 +37,29 @@ export default function Gate3Screen({ preauthToken, onSuccess, onBack }) {
     try {
       const { auth_token, user } = await gate3(preauthToken, secretCode);
       if (!auth_token) throw new Error('Invalid secret code. Try again.');
+      await cacheOfflineCredentials(dream, secretCode, user);
       await onSuccess(auth_token, user);
     } catch (err) {
+      // Offline fallback: verify against locally cached credentials so the
+      // app stays usable with no network (token expired, airplane mode, etc.).
+      const offlineUser = await verifyOfflineCredentials(dream, secretCode);
+      if (offlineUser) {
+        const token = makeLocalToken(offlineUser);
+        await cacheOfflineCredentials(dream, secretCode, offlineUser);
+        await onSuccess(token, offlineUser);
+        return;
+      }
       setError(friendlyErrorMessage(err, 'Invalid secret code. Try again.'));
     } finally {
       setSubmitting(false);
     }
-  }, [preauthToken, secretCode, onSuccess]);
+  }, [preauthToken, dream, secretCode, onSuccess]);
 
   return (
     <View style={[st.wrap, { paddingTop: insets.top }]}>
-      <View style={st.scroll}>
-        <View style={st.card}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={st.scroll}>
+          <View style={st.card}>
           <Text style={st.title}>Gate 3 of 3</Text>
           <Text style={st.subtitle}>Enter your secret code</Text>
 
@@ -74,7 +93,8 @@ export default function Gate3Screen({ preauthToken, onSuccess, onBack }) {
           </TouchableOpacity>
           <Text style={st.foot}>Jibunai · yours, quietly</Text>
         </View>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }

@@ -6,7 +6,6 @@ import Notes from '../components/Notes';
 import BlogScreen from '../components/Blogscreen';
 import ArchiveScreen from '../components/Archivescreen';
 import GestureDraw from '../components/Gesturedraw';
-import MusicVibes from '../components/Musicvibes';
 import HobbiesScreen from '../components/Hobbiesscreen';
 import Wishlist from '../components/Wishlist';
 import WatchlistScreen from '../components/Watchlistscreen';
@@ -41,7 +40,6 @@ const SCREENS = {
   blog: BlogScreen,
   gesture: GestureDraw,
   archive: ArchiveScreen,
-  music: MusicVibes,
   hobbies: HobbiesScreen,
   wishlist: Wishlist,
   watchlist: WatchlistScreen,

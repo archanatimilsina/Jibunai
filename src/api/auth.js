@@ -20,6 +20,52 @@
  * Secret codes are never logged or returned by these helpers.
  */
 import { ApiError, apiSend, apiGet } from './http';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+/** Key for locally cached login credentials (dream + secret code + user),
+ *  stored after a successful online Gate 3 so the user can re-authenticate
+ *  offline later (token expired, no network, airplane mode, etc.). */
+const OFFLINE_CRED_KEY = 'jibunai_offline_credentials:v1';
+
+/** Cache credentials after a successful online login. */
+export async function cacheOfflineCredentials(dream, secretCode, user) {
+  try {
+    await AsyncStorage.setItem(OFFLINE_CRED_KEY, JSON.stringify({
+      dream: String(dream || '').toLowerCase().trim(),
+      secretCode: String(secretCode || ''),
+      user,
+    }));
+  } catch {
+    /* storage unavailable — offline re-login won't be possible this session */
+  }
+}
+
+/** Verify dream + secret code against locally cached credentials.
+ *  Returns the cached user object on match, null otherwise. */
+export async function verifyOfflineCredentials(dream, secretCode) {
+  try {
+    const raw = await AsyncStorage.getItem(OFFLINE_CRED_KEY);
+    if (!raw) return null;
+    const creds = JSON.parse(raw);
+    if (
+      creds.dream === String(dream || '').toLowerCase().trim() &&
+      creds.secretCode === String(secretCode || '')
+    ) {
+      return creds.user || null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/** Mint a purely local auth token when offline verification passes.
+ *  Format: local-auth:<username>:<timestamp> — validated client-side only,
+ *  never sent to the server. */
+export function makeLocalToken(user) {
+  const name = (user && (user.name || user.username)) || 'user';
+  return `local-auth:${name}:${Date.now()}`;
+}
 
 const AUTH_BASE = '/auth';
 

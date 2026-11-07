@@ -6,9 +6,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { enableLayoutAnimation } from '../utils/layoutAnimation';
-import useOfflineCollection from '../hooks/useOfflineCollection';
-import { TTL } from '../api/resources';
+import useLocalCollection from '../hooks/useLocalCollection';
 import { C as TC } from '../theme';
+import { BREAKPOINTS } from '../utils/responsive';
 
 enableLayoutAnimation();
 
@@ -51,29 +51,22 @@ const DayBox = React.memo(function DayBox({ day, busy, size, onToggle }) {
 
 export default function GoalsScreen() {
   const { width } = useWindowDimensions();
-  const narrow = width < 500;
-  const stackForm = width < 600;
-  const pad = width >= 600 ? 24 : 16;
-  const daySize = width >= 600 ? 28 : 34;
+  const narrow = width < BREAKPOINTS.medium;
+  const stackForm = width < BREAKPOINTS.medium;
+  const pad = width >= BREAKPOINTS.medium ? 24 : 16;
+  const daySize = width >= BREAKPOINTS.medium ? 28 : 34;
 
   const [error, setError] = useState('');
   const {
     items: goals,
     loading,
-    refreshing,
     errorText: loadError,
-    refresh,
-    isOnline,
-    pending,
     create,
     update,
     remove,
     runCustom,
-  } = useOfflineCollection('goals', {
-    ttl: TTL.LIVE,
+  } = useLocalCollection('goals', {
     initial: [],
-    createPath: '/Goals/',
-    itemPath: (id) => `/Goals/${id}/`,
   });
   const [isCreating, setIsCreating] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -90,15 +83,15 @@ export default function GoalsScreen() {
 
   const handleCreate = async () => {
     const t = parseTimeline(newGoal.timeline);
-    if (!newGoal.title.trim()) { setError('Add an objective for your goal.'); return; }
-    if (!validTimeline(t)) { setError('Timeline must be between 1 and 365 days.'); return; }
+    if (!newGoal.title.trim()) { setError('Add an objective.'); return; }
+    if (!validTimeline(t)) { setError('Timeline must be 1–365 days.'); return; }
     setSavingId('new'); setError('');
     try {
       await create({ title: newGoal.title.trim(), timeline: t });
       anim();
       setNewGoal({ title: '', timeline: '' });
       setIsCreating(false);
-    } catch (e) { setError(e.message || 'Failed to create goal.'); }
+    } catch (e) { setError(e.message || 'Create failed.'); }
     finally { setSavingId(null); }
   };
 
@@ -106,7 +99,7 @@ export default function GoalsScreen() {
     setSavingId(goal.id); setError('');
     try {
       await update(goal.id, { done: !goal.done });
-    } catch (e) { setError(e.message || 'Could not update status.'); }
+    } catch (e) { setError(e.message || 'Update failed.'); }
     finally { setSavingId(null); }
   };
 
@@ -123,7 +116,7 @@ export default function GoalsScreen() {
           }
         )),
       });
-    } catch (e) { setError(e.message || 'Could not update that day.'); }
+    } catch (e) { setError(e.message || 'Update failed.'); }
     finally { setTogglingDay(null); }
   };
 
@@ -136,8 +129,8 @@ export default function GoalsScreen() {
 
   const handleUpdate = async (goal) => {
     const t = parseTimeline(editGoal.timeline);
-    if (!editGoal.title.trim()) { setError('Add an objective for your goal.'); return; }
-    if (!validTimeline(t)) { setError('Timeline must be between 1 and 365 days.'); return; }
+    if (!editGoal.title.trim()) { setError('Add an objective.'); return; }
+    if (!validTimeline(t)) { setError('Timeline must be 1–365 days.'); return; }
     setSavingId(goal.id); setError('');
     try {
       await update(goal.id, {
@@ -146,7 +139,7 @@ export default function GoalsScreen() {
       });
       anim();
       setEditingId(null);
-    } catch (e) { setError(e.message || 'Failed to update goal.'); }
+    } catch (e) { setError(e.message || 'Update failed.'); }
     finally { setSavingId(null); }
   };
 
@@ -155,10 +148,10 @@ export default function GoalsScreen() {
     try {
       anim();
       await remove(id);
-    } catch (e) { setError(e.message || 'Could not delete goal.'); }
+    } catch (e) { setError(e.message || 'Delete failed.'); }
     finally { setSavingId(null); }
   };
-  const handleDelete = (g) => Alert.alert('Delete this goal permanently?', `“${g.title}” and its day check-ins will be removed.`, [
+  const handleDelete = (g) => Alert.alert('Delete this goal?', `“${g.title}” and its check-ins will be removed.`, [
     { text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => deleteNow(g.id) },
   ]);
 
@@ -225,7 +218,6 @@ export default function GoalsScreen() {
               <>
                 <Text style={s.summary}>
                   {summary.done} of {summary.total} goals complete
-                  {!isOnline ? ' · offline — saved on this device' : pending > 0 ? ` · ${pending} to sync` : ''}
                 </Text>
                 <View style={{ gap: 14 }}>
                   {goals.map((g) => {
@@ -313,7 +305,7 @@ const s = StyleSheet.create({
   formBlock: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, backgroundColor: C.muted, borderWidth: 1.5, borderColor: C.border, borderRadius: 14, padding: 18, marginBottom: 26 },
   fgroup: { gap: 6 },
   flabel: { fontSize: 11.5, fontWeight: '700', letterSpacing: 0.6, color: C.soft },
-  input: { backgroundColor: C.white, borderWidth: 1.5, borderColor: C.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 11 : 8, fontSize: 15, color: C.dark },
+  input: { backgroundColor: C.white, borderWidth: 1.5, borderColor: C.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 11 : 8, fontSize: 16, color: C.dark },
 
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 32 },
   empty: { alignItems: 'center', paddingVertical: 48, borderWidth: 1.5, borderStyle: 'dashed', borderColor: C.border, borderRadius: 14 },

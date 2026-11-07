@@ -6,14 +6,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
-import useOfflineCollection from '../hooks/useOfflineCollection';
-import { TTL } from '../api/resources';
+import useLocalCollection from '../hooks/useLocalCollection';
+import { BREAKPOINTS } from '../utils/responsive';
 
 
 const C = {
   bg: '#f6f5f0', white: '#ffffff', dark: '#1a1a2e', green: '#2d6a4f', greenLt: '#e4f1ea',
-  border: '#d8d4cc', muted: '#eceae3', soft: '#7a7567', red: '#c0392b', redLt: '#fdecea',
-  gold: '#d4af37', ph: '#bdb8ad',
+  border: '#d8d4cc', muted: '#eceae3', soft: '#5c574c', red: '#c0392b', redLt: '#fdecea',
+  gold: '#d4af37', ph: '#6b665b',
 };
 
 /* the app talks in its own status names, the API keeps its older ones */
@@ -71,13 +71,13 @@ const Pill = ({ label, onPress, primary, style }) => (
 
 const Tab = ({ label, active, onPress }) => (
   <Pressable onPress={onPress} style={[s.tab, active && { backgroundColor: C.dark, borderColor: C.dark }]}>
-    <Text style={[s.tabText, active && { color: C.bg }]}>{label}</Text>
+    <Text style={[s.tabText, active && { color: C.bg }]} maxFontSizeMultiplier={1.3}>{label}</Text>
   </Pressable>
 );
 
 const Badge = ({ label, c }) => (
   <View style={[s.badge, { backgroundColor: c.bg, borderColor: c.border }]}>
-    <Text style={[s.badgeText, { color: c.color }]}>{label}</Text>
+    <Text style={[s.badgeText, { color: c.color }]} maxFontSizeMultiplier={1.3}>{label}</Text>
   </View>
 );
 
@@ -120,28 +120,20 @@ const Spinner = ({ color = '#fff' }) => <ActivityIndicator size="small" color={c
 
 export default function WatchlistScreen() {
   const { width } = useWindowDimensions();
-  const cols = width >= 1200 ? 4 : width >= 900 ? 3 : width >= 600 ? 2 : 1;
-  const pad = width >= 600 ? 28 : 16;
+  const cols = width >= 1200 ? 4 : width >= BREAKPOINTS.wide ? 3 : width >= BREAKPOINTS.medium ? 2 : 1;
+  const pad = width >= BREAKPOINTS.medium ? 28 : 16;
 
   const [savingId, setSavingId] = useState(null);
   const [apiError, setApiError] = useState('');
   const {
     items,
     loading,
-    refreshing,
     errorText: loadError,
-    refresh,
-    isOnline,
-    pending,
     create,
     update,
     remove,
-  } = useOfflineCollection('watchlist', {
-    ttl: TTL.STATIC,
+  } = useLocalCollection('watchlist', {
     initial: [],
-    createPath: '/watchlist/',
-    itemPath: (id) => `/watchlist/${id}/`,
-    updateMethod: 'PUT',
   });
 
   const [tab, setTab] = useState('All');
@@ -190,11 +182,10 @@ export default function WatchlistScreen() {
       const payload = { type: form.type, title: form.title.trim(), genre: form.genre.trim(), status: statusApi(form.status) };
       if (isEdit) {
         const { offline } = await update(editItem.id, payload);
-        showToast(offline ? `"${form.title.trim()}" saved on this device — will sync.` : `"${form.title.trim()}" updated!`);
+        showToast(offline ? 'Saved on this device.' : 'Updated.');
       } else {
         const { data, offline } = await create(payload);
-        const title = (data && data.title) || form.title.trim();
-        showToast(offline ? `"${title}" saved on this device — will sync.` : `"${title}" added!`);
+        showToast(offline ? 'Saved on this device.' : 'Added.');
       }
       setModal(null);
     } catch (err) { setApiError(err.message || 'Save failed.'); }
@@ -207,9 +198,9 @@ export default function WatchlistScreen() {
     try {
       const { offline } = await remove(delTarget.id);
       setSelectedId((id) => (id === delTarget.id ? null : id));
-      showToast(offline ? `"${delTarget.title}" removed on this device — will sync.` : `"${delTarget.title}" removed.`, 'trash-2');
+      showToast(offline ? 'Removed on this device.' : 'Removed.', 'trash-2');
       setDelTarget(null);
-    } catch (err) { setApiError(err.message || 'Could not delete item.'); setDelTarget(null); }
+    } catch (err) { setApiError(err.message || 'Delete failed.'); setDelTarget(null); }
     finally { setSavingId(null); }
   };
 
@@ -259,7 +250,7 @@ export default function WatchlistScreen() {
                 <Pressable
                   disabled={busy}
                   onPress={() => openEdit(item)}
-                  hitSlop={6}
+                  hitSlop={8}
                   accessibilityRole="button"
                   accessibilityLabel={`Edit ${item.title}`}
                   style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.7 }]}
@@ -269,7 +260,7 @@ export default function WatchlistScreen() {
                 <Pressable
                   disabled={busy}
                   onPress={() => setDelTarget(item)}
-                  hitSlop={6}
+                  hitSlop={8}
                   accessibilityRole="button"
                   accessibilityLabel={`Delete ${item.title}`}
                   style={({ pressed }) => [s.iconBtn, s.iconBtnDanger, pressed && { opacity: 0.7 }]}
@@ -408,7 +399,7 @@ export default function WatchlistScreen() {
             <Feather name="trash-2" size={30} color={C.red} />
             <Text style={[s.emptyTitle, { marginTop: 10 }]}>Remove from Watchlist?</Text>
             <Text style={[s.emptyDesc, { textAlign: 'center', marginBottom: 22 }]}>
-              <Text style={{ color: C.dark, fontWeight: '800' }}>{delTarget?.title}</Text> will be permanently removed. This cannot be undone.
+              <Text style={{ color: C.dark, fontWeight: '800' }}>{delTarget?.title}</Text> will be removed. This cannot be undone.
             </Text>
             <View style={{ flexDirection: 'row', gap: 12, alignSelf: 'stretch' }}>
               <Pressable onPress={handleDelete} disabled={savingId === delTarget?.id} style={[s.saveBtn, { backgroundColor: C.red, borderColor: C.red }, savingId === delTarget?.id && { opacity: 0.5 }]}>
@@ -452,7 +443,7 @@ const s = StyleSheet.create({
   controls: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 14 },
   searchBox: { flex: 1, minWidth: 200, justifyContent: 'center' },
   searchIcon: { position: 'absolute', left: 14, zIndex: 1, top: 0, bottom: 0, justifyContent: 'center' },
-  searchInput: { backgroundColor: C.white, borderWidth: 1.5, borderColor: C.border, borderRadius: 100, paddingLeft: 40, paddingRight: 38, paddingVertical: Platform.OS === 'ios' ? 11 : 8, fontSize: 14.5, color: C.dark },
+  searchInput: { backgroundColor: C.white, borderWidth: 1.5, borderColor: C.border, borderRadius: 100, paddingLeft: 40, paddingRight: 38, paddingVertical: Platform.OS === 'ios' ? 11 : 8, fontSize: 16, color: C.dark },
   clear: { position: 'absolute', right: 10, width: 22, height: 22, borderRadius: 11, backgroundColor: C.muted, alignItems: 'center', justifyContent: 'center' },
   sortBtn: { backgroundColor: C.white, borderWidth: 1.5, borderColor: C.border, borderRadius: 100, paddingVertical: Platform.OS === 'ios' ? 11 : 9, paddingHorizontal: 16 },
   sortText: { fontSize: 12.5, fontWeight: '800', color: C.dark },
@@ -496,7 +487,7 @@ const s = StyleSheet.create({
   formCol: { flexGrow: 1, flexBasis: 150, gap: 6 },
   formFull: { gap: 6, marginBottom: 14 },
   label: { fontSize: 10.5, fontWeight: '800', letterSpacing: 2, color: C.soft },
-  input: { backgroundColor: C.bg, borderWidth: 1.5, borderColor: C.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 12 : 9, fontSize: 15, color: C.dark },
+  input: { backgroundColor: C.bg, borderWidth: 1.5, borderColor: C.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 12 : 9, fontSize: 16, color: C.dark },
   selectRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   modalError: { backgroundColor: C.redLt, borderWidth: 1, borderColor: '#f5b7b1', borderRadius: 8, padding: 11, marginTop: 4 },
   saveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: C.dark, borderWidth: 2, borderColor: C.dark, borderRadius: 100, paddingVertical: 13 },

@@ -14,6 +14,7 @@ import { Feather } from '@expo/vector-icons';
 import { subscribeOnline, isOnlineNow } from '../api/connectivity';
 import { subscribeOutbox } from '../api/outbox';
 import { syncNow } from '../api/syncEngine';
+import { C } from '../theme';
 
 export function useSyncStatus() {
   const [online, setOnline] = useState(isOnlineNow());
@@ -46,9 +47,9 @@ export default function SyncBanner({ onPressRetry }) {
     <View pointerEvents="box-none" style={st.wrap}>
       <View style={[st.pill, !online ? st.offline : st.queued]}>
         {syncing ? (
-          <ActivityIndicator size="small" color="#fff" />
+          <ActivityIndicator size="small" color={C.white} />
         ) : (
-          <Feather name={!online ? 'wifi-off' : 'refresh-cw'} size={13} color="#fff" />
+          <Feather name={!online ? 'wifi-off' : 'refresh-cw'} size={13} color={C.white} />
         )}
         <Text style={st.text}>
           {!online
@@ -89,8 +90,8 @@ const st = StyleSheet.create({
     elevation: 8,
   },
   offline: { backgroundColor: '#92600a' },
-  queued: { backgroundColor: '#2d6a4f' },
-  text: { color: '#fff', fontSize: 12.5, fontWeight: '700' },
+  queued: { backgroundColor: C.green },
+  text: { color: C.white, fontSize: 12.5, fontWeight: '700' },
   retry: {
     marginLeft: 2,
     paddingHorizontal: 10,
@@ -98,5 +99,5 @@ const st = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.22)',
   },
-  retryText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  retryText: { color: C.white, fontSize: 12, fontWeight: '800' },
 });

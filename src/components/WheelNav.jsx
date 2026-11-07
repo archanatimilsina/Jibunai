@@ -20,14 +20,14 @@ import { systemForRoute } from '../systems/catalog';
 import { useSystems } from '../systems/prefs';
 import { C } from '../theme';
 
-/* light palette — matches the rest of the app */
-const SEG_A = '#ffffff';
-const SEG_B = '#fbfaf7';
-const SEG_BORDER = '#e4e0d6';
-const SEG_SELECTED = '#e4f1ea';
+/* light palette — DESIGN.md tokens via src/theme.js (values only, no logic change) */
+const SEG_A = C.surface;
+const SEG_B = C.surfaceAlt;
+const SEG_BORDER = C.border;
+const SEG_SELECTED = C.greenLt;
 const SEG_PICKED = 'rgba(45,106,79,0.16)';
-const GLOW = '#2d6a4f';
-const DISC = '#ffffff';
+const GLOW = C.green;
+const DISC = C.surface;
 
 const POINTER = { w: 34, h: 17 };
 
@@ -101,7 +101,7 @@ export default function WheelNav({
   /* -------------------------------- layout ------------------------------- */
   const readoutH = 58;
   const availH = height - insets.top - insets.bottom - readoutH - POINTER.h - 44;
-  const D = Math.max(210, Math.min(width - 40, availH, 420));
+  const D = Math.max(160, Math.min(width - 40, availH, 420)); // 160 floor: short landscape heights must not overflow
   const R = D / 2;
   const rInner = R * 0.36;
   const rIcon = R * 0.73;
@@ -449,11 +449,8 @@ export default function WheelNav({
               <Feather name={alignedTab.icon} size={13} color={C.green} />
             </View>
             <View style={styles.readoutText}>
-              <Text style={styles.readoutLabel} numberOfLines={1}>
+              <Text style={styles.readoutLabel} numberOfLines={1} maxFontSizeMultiplier={1.3}>
                 {alignedTab.label}
-              </Text>
-              <Text style={styles.readoutGroup} numberOfLines={1}>
-                {pending ? 'opening…' : alignedTab.group}
               </Text>
             </View>
           </View>
@@ -557,7 +554,7 @@ export default function WheelNav({
                       color={isAligned || i === picked ? C.green : C.soft}
                     />
                     {showAllLabels ? (
-                      <Text style={[styles.iconLabel, isAligned && { color: C.green }]} numberOfLines={1}>
+                      <Text style={[styles.iconLabel, isAligned && { color: C.green }]} numberOfLines={1} maxFontSizeMultiplier={1.3}>
                         {tab.label}
                       </Text>
                     ) : null}

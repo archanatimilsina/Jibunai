@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { logoutApi, me as fetchMe } from '../api/auth';
+import { cacheOfflineCredentials, verifyOfflineCredentials, makeLocalToken } from '../api/auth';
 import { secureDelete, secureGet, secureSet } from '../api/secureStore';
 
 const TOKEN_KEY = 'jibunai_auth_token';
@@ -95,11 +96,25 @@ export function AuthProvider({ children }) {
     }
   }, [token, logout]);
 
+  /** Re-authenticate without the server — used when the auth token expired
+   *  and there's no network. Verifies dream + secret code against the
+   *  credentials cached after the first successful online login. */
+  const offlineLogin = useCallback(async (dream, secretCode) => {
+    const user = await verifyOfflineCredentials(dream, secretCode);
+    if (!user) throw new Error('Invalid credentials. Try again.');
+    const token = makeLocalToken(user);
+    await secureSet(TOKEN_KEY, token);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(user ?? null));
+    setToken(token);
+    setUser(user ?? null);
+    return user;
+  }, []);
+
   const isAuthenticated = !!token && !!user;
 
   return (
     <AuthContext.Provider
-      value={{ token, user, ready, isAuthenticated, login, logout, refreshUser }}
+      value={{ token, user, ready, isAuthenticated, login, logout, refreshUser, offlineLogin }}
     >
       {children}
     </AuthContext.Provider>

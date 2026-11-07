@@ -239,7 +239,7 @@ const st = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontFamily: F.sans,
-    fontSize: 15,
+    fontSize: 16,
     color: C.dark,
     marginTop: 4,
   },

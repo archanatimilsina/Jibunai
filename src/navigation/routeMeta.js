@@ -18,7 +18,6 @@ export const ROUTE_META = [
   { key: 'gesture', label: 'Gesture Draw', caption: 'Sketch ideas', group: 'Write', icon: 'pen-tool' },
   { key: 'archive', label: 'Archive', caption: 'Everything saved', group: 'Write', icon: 'archive' },
 
-  { key: 'music', label: 'Music Vibes', caption: 'Listen and log', group: 'Life', icon: 'music' },
   { key: 'hobbies', label: 'Hobbies', caption: 'What you build', group: 'Life', icon: 'heart' },
   { key: 'wishlist', label: 'Wishlist', caption: 'Things to get', group: 'Life', icon: 'star' },
   { key: 'watchlist', label: 'Watchlist', caption: 'Shows and films', group: 'Life', icon: 'tv' },

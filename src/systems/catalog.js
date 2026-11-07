@@ -106,17 +106,6 @@ export const SYSTEMS = [
     defaultEnabled: true,
   },
   {
-    key: 'music',
-    label: 'Music Vibes',
-    description: 'Listen and log the mood.',
-    icon: 'music',
-    group: 'Life',
-    routes: ['music'],
-    resources: [{ key: 'musicVibes', fetchKind: 'resource' }],
-    localKeys: [],
-    defaultEnabled: true,
-  },
-  {
     key: 'hobbies',
     label: 'Hobbies',
     description: 'What you build and love.',
@@ -159,7 +148,7 @@ export const SYSTEMS = [
     resources: [],
     localKeys: [],
     // Alarms live only on this device (OS-scheduled, no server copy).
-    storageKeys: ['jibunai:alarms:v1'],
+    storageKeys: ['jibunai:alarms:v1', 'jibunai:alarms:trash:v1', 'jibunai:alarms:paused:v1', 'jibunai:alarms:recent-labels:v1'],
     defaultEnabled: true,
   },
   {

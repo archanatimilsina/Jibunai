@@ -1,25 +1,38 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Image,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, mono } from '../theme';
+import { BREAKPOINTS } from '../utils/responsive';
+import { ROUTE_META } from '../navigation/routeMeta';
+import { systemForRoute } from '../systems/catalog';
 import TodaysTasks from '../components/TodaysTasks';
 import { useSystems } from '../systems/prefs';
 
 export default function HomeScreen({ onNavigate }) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { isEnabled } = useSystems();
+  const { enabled, isEnabled } = useSystems();
 
-  const compact = width < 380;
-  const wide = width >= 700;
+  const compact = width < BREAKPOINTS.narrow;
+  const wide = width >= BREAKPOINTS.medium;
+
+  // every navigable menu except the dashboard itself, gated like the wheel
+  const menus = useMemo(() => ROUTE_META.filter((m) => {
+    if (m.key === 'home' || m.key === 'settings') return true;
+    const sys = systemForRoute(m.key);
+    if (!sys) return true;
+    return enabled.includes(sys.key);
+  }), [enabled]);
 
   return (
     <View style={[st.wrap, { paddingTop: insets.top }]}>
@@ -43,6 +56,31 @@ export default function HomeScreen({ onNavigate }) {
           />
           <Text style={[st.brand, compact && { fontSize: 34 }]}>Jibunai</Text>
           <Text style={st.tagline}>yours, quietly</Text>
+        </View>
+
+        {/* horizontally scrolling menu container — all menus in one row */}
+        <View style={st.menuWrap}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={st.menuRow}
+          >
+            {menus.map((m) => (
+              <Pressable
+                key={m.key}
+                onPress={() => onNavigate?.(m.key)}
+                accessibilityLabel={`Open ${m.label}`}
+                style={st.menuChip}
+              >
+                <Feather name={m.icon} size={14} color={C.dark} />
+                <Text style={st.menuLabel} numberOfLines={1}>
+                  {m.label}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          {/* small triangle on the right edge showing there is more to pull */}
+          <View style={st.pullTriangle} />
         </View>
 
         {/* what is still waiting to be done (only when tasks are enabled) */}
@@ -69,6 +107,45 @@ const st = StyleSheet.create({
     letterSpacing: 3.4,
     textTransform: 'uppercase',
     color: C.soft,
+  },
+
+  menuWrap: { position: 'relative', marginTop: 10 },
+  menuRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 2,
+    paddingBottom: 6,
+    alignItems: 'center',
+  },
+  menuChip: {
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.borderLt,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 78,
+  },
+  menuLabel: { fontSize: 11, fontWeight: '700', color: C.dark, letterSpacing: 0.4 },
+
+  // pull indicator — small triangle on the right edge
+  pullTriangle: {
+    position: 'absolute',
+    right: 6,
+    top: 10,
+    width: 0,
+    height: 0,
+    backgroundColor: 'transparent',
+    borderStyle: 'solid',
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderTopWidth: 0,
+    borderBottomWidth: 12,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: C.soft,
   },
 
   foot: {

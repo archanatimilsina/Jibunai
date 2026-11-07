@@ -26,8 +26,14 @@ import { initNotifications, rescheduleOnBoot } from './src/notifications/reminde
 import { bootAlarms } from './src/alarms/store';
 import { bootDateKeeper } from './src/datekeeper/store';
 import SyncBanner from './src/components/SyncBanner';
-import MiniPlayer from './src/components/MiniPlayer';
-import { attachPlayer } from './src/player/engine';
+import { attachPlayer, pause as pausePlayback, subscribePlayer, toggle as togglePlayback } from './src/player/engine';
+import {
+  ACTION_STOP,
+  ACTION_TOGGLE,
+  clearPlaybackNotification,
+  ensurePlaybackSetup,
+  showPlaybackNotification,
+} from './src/player/playbackNotification';
 import AppSplash from './src/components/AppSplash';
 import ScreenFrame from './src/components/ScreenFrame';
 import WheelNav from './src/components/WheelNav';
@@ -167,6 +173,41 @@ function AppShell() {
     startCacheLifecycle();
     startSyncEngine();
     attachPlayer(audioPlayer);
+    // Background playback: keep audio alive with the screen locked or the
+    // app backgrounded (fully offline — files play from this device).
+    try {
+      const Audio = require('expo-audio');
+      Audio.setAudioModeAsync?.({
+        playsInSilentMode: true,
+        allowsRecording: false,
+        staysActiveInBackground: true,
+        interruptionMode: 'duckOthers',
+      }).catch(() => {});
+    } catch {
+      /* expo-audio mode is best-effort on web/older builds */
+    }
+    // Notification-shade card (pull down from the top): Pause/Play + ✕ Stop.
+    let unsubPlayer = null;
+    let notifSub = null;
+    try {
+      ensurePlaybackSetup().catch(() => {});
+      unsubPlayer = subscribePlayer((snap) => {
+        if (snap.track) showPlaybackNotification(snap.track, snap.playing).catch(() => {});
+        else clearPlaybackNotification().catch(() => {});
+      }) || null;
+      const N = require('expo-notifications');
+      notifSub = N.addNotificationResponseReceivedListener?.((res) => {
+        const action = res?.actionIdentifier;
+        if (action === ACTION_STOP) {
+          pausePlayback();
+          clearPlaybackNotification().catch(() => {});
+        } else if (action === ACTION_TOGGLE) {
+          togglePlayback();
+        }
+      }) || null;
+    } catch {
+      /* shade controls are best-effort */
+    }
     initNotifications().then(() => {
       rescheduleOnBoot().catch(() => {});
       bootAlarms().catch(() => {});
@@ -174,7 +215,19 @@ function AppShell() {
       // Drain anything queued while the app was closed.
       syncNow().catch(() => {});
     }).catch(() => {});
-    return () => stopCacheLifecycle();
+    return () => {
+      stopCacheLifecycle();
+      try {
+        unsubPlayer?.();
+      } catch {
+        /* ignore */
+      }
+      try {
+        notifSub?.remove?.();
+      } catch {
+        /* ignore */
+      }
+    };
   }, []);
 
   const navigate = useCallback((key) => {
@@ -293,7 +346,6 @@ function AppShell() {
           <Text style={st.logoutText}>Logout</Text>
         </TouchableOpacity>
 
-        <MiniPlayer hidden={activeKey === 'player'} />
         <SyncBanner />
       </View>
     </>
@@ -305,6 +357,7 @@ function AuthFlow() {
   const { login, isAuthenticated } = useAuth();
   const [mode, setMode] = useState('gate1'); // 'register' | 'gate1' | 'gate2' | 'gate3'
   const [preauthToken, setPreauthToken] = useState(null);
+  const [pendingDream, setPendingDream] = useState('');
 
   // If login() was called from Gate 3, the provider flips isAuthenticated and
   // AppBoot switches to the shell. Keep this as a safety net.
@@ -319,8 +372,9 @@ function AuthFlow() {
     setMode('gate2');
   }, []);
 
-  const handleGate2Success = useCallback((token) => {
+  const handleGate2Success = useCallback((token, dream) => {
     if (token) setPreauthToken(token);
+    setPendingDream(dream);
     setMode('gate3');
   }, []);
 
@@ -339,6 +393,7 @@ function AuthFlow() {
     gate3: (
       <Gate3Screen
         preauthToken={preauthToken}
+        dream={pendingDream}
         onSuccess={handleGate3Success}
         onBack={() => setMode('gate2')}
       />

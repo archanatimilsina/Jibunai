@@ -10,6 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BREAKPOINTS } from '../utils/responsive';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFonts } from 'expo-font';
 import {
@@ -23,8 +24,8 @@ import {
 import { DMMono_400Regular, DMMono_500Medium } from '@expo-google-fonts/dm-mono';
 
 
-import useOfflineCollection from '../hooks/useOfflineCollection';
-import { TTL } from '../api/resources';
+import useLocalCollection from '../hooks/useLocalCollection';
+
 
 const T = {
   pageBg: '#f5f0e8',
@@ -447,12 +448,12 @@ export default function MyDayLogPage() {
   });
 
   const { width } = useWindowDimensions();
-  const cols = width >= 1024 ? 3 : width >= 600 ? 2 : 1;
+  const cols = width >= BREAKPOINTS.wide ? 3 : width >= BREAKPOINTS.medium ? 2 : 1;
   const gap = cols === 1 ? 0 : 24;
-  const sidePad = width >= 600 ? 32 : 18;
+  const sidePad = width >= BREAKPOINTS.medium ? 32 : 18;
   const contentWidth = Math.min(width, 1320) - sidePad * 2;
-  const wideModal = width >= 700;
-  const heroSize = width >= 1024 ? 84 : width >= 600 ? 66 : 46;
+  const wideModal = width >= BREAKPOINTS.medium;
+  const heroSize = width >= BREAKPOINTS.wide ? 84 : width >= BREAKPOINTS.medium ? 66 : 46;
 
   const {
     items: entries,
@@ -465,13 +466,8 @@ export default function MyDayLogPage() {
     createWithFile,
     updateWithFile,
     remove,
-  } = useOfflineCollection('daylogs', {
-    ttl: TTL.EDITABLE,
+  } = useLocalCollection('daylogs', {
     initial: [],
-    createPath: '/daylogs/',
-    itemPath: (id) => `/daylogs/${id}/`,
-    updateMethod: 'PUT',
-    imageField: 'url',
   });
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [pickedFile, setPickedFile] = useState(null);
@@ -561,7 +557,7 @@ export default function MyDayLogPage() {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted && perm.status !== 'limited') {
-        showToast('Allow photo access in Settings to pick an image.', 'error');
+        showToast('Allow photo access to pick image.', 'error');
         return;
       }
       const res = await ImagePicker.launchImageLibraryAsync({
@@ -573,7 +569,7 @@ export default function MyDayLogPage() {
       setPickedFile(res.assets[0]);
       setFormData((p) => ({ ...p, source: 'local', remote_url: '' }));
     } catch {
-      showToast("Couldn't open your photos.", 'error');
+      showToast("Couldn't open photos.", 'error');
     }
   };
 
@@ -600,9 +596,7 @@ export default function MyDayLogPage() {
         ? await updateWithFile(currentId, fields, file, { method: 'PUT' })
         : await createWithFile(fields, file);
       closeModal();
-      showToast(offline
-        ? (isEditing ? 'Update saved on this device — will sync.' : 'Day saved on this device — will sync.')
-        : (isEditing ? 'Day updated.' : 'Day logged.'));
+      showToast(offline ? 'Saved on this device.' : isEditing ? 'Updated.' : 'Logged.');
     } catch (err) {
       showToast(err.message || 'Submission failed.', 'error');
     } finally {
@@ -614,7 +608,7 @@ export default function MyDayLogPage() {
     try {
       const { offline } = await remove(entry.id);
       setActiveId(null);
-      showToast(offline ? 'Removed on this device — will sync.' : 'Memory removed.');
+      showToast(offline ? 'Removed on this device.' : 'Removed.');
     } catch (err) {
       showToast(err.message || 'Delete failed.', 'error');
     }
@@ -730,7 +724,7 @@ export default function MyDayLogPage() {
               </View>
             </View>
 
-            <Text style={[st.heroSub, { fontSize: width >= 600 ? 16.5 : 15 }]}>
+            <Text style={[st.heroSub, { fontSize: width >= BREAKPOINTS.medium ? 16.5 : 15 }]}>
               Recording my days before my goldfish brain deletes it
             </Text>
 
@@ -892,7 +886,7 @@ export default function MyDayLogPage() {
         onExtraChange={updateExtra}
       />
 
-      {toast && <Toast key={toast.k} toast={toast} wide={width >= 700} />}
+      {toast && <Toast key={toast.k} toast={toast} wide={width >= BREAKPOINTS.medium} />}
     </SafeAreaView>
   );
 }
@@ -965,7 +959,7 @@ const st = StyleSheet.create({
     paddingLeft: 16, paddingRight: 8, marginBottom: 28,
   },
   searchIcon: { fontSize: 17, color: T.muted, marginRight: 8, fontFamily: F.sans },
-  searchInput: { flex: 1, fontFamily: F.sans, fontSize: 15, color: T.ink, paddingVertical: Platform.OS === 'ios' ? 13 : 9 },
+  searchInput: { flex: 1, fontFamily: F.sans, fontSize: 16, color: T.ink, paddingVertical: Platform.OS === 'ios' ? 13 : 9 },
   searchClear: { padding: 8 },
   searchClearText: { fontSize: 22, color: T.muted, lineHeight: 24, fontFamily: F.sans },
   viewToggle: {
