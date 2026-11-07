@@ -40,25 +40,36 @@ const setOnline = (next) => {
   });
 };
 
-/** One-shot backend reachability check. Never throws. */
-export async function probeOnline({ timeout = 15_000 } = {}) {
-  if (!API_BASE) return false;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-  try {
-    // /api/health/ is cheap (200 + DB check); bare /api has no route.
-    // Give Render's sleeping tier room to wake before calling us offline.
-    const res = await fetch(`${API_BASE}${HEALTH_PATH}`, { method: 'GET', signal: controller.signal });
-    // Any HTTP status (200, 404, 401, …) proves the network path works.
-    void res.status;
-    setOnline(true);
-    return true;
-  } catch {
-    setOnline(false);
-    return false;
-  } finally {
-    clearTimeout(timer);
-  }
+/** One-shot backend reachability check. Never throws, never runs twice at once. */
+let probing = null;
+
+export function probeOnline({ timeout = 30_000 } = {}) {
+  if (probing) return probing;
+  probing = (async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      // /api/health/ is cheap (200 + DB check); bare /api has no route.
+      // Render's sleeping tier can take >30 s to answer the first request, so
+      // give it room before declaring the backend unreachable.
+      const res = await fetch(`${API_BASE}${HEALTH_PATH}`, {
+        method: 'GET',
+        signal: controller.signal,
+      });
+      // Any HTTP status (200, 404, 401, …) proves the network path works.
+      void res.status;
+      setOnline(true);
+      return true;
+    } catch {
+      setOnline(false);
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  })().finally(() => {
+    probing = null;
+  });
+  return probing;
 }
 
 export function isOnlineNow() {

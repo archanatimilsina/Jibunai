@@ -7,9 +7,27 @@ import { secureGet } from './secureStore';
 
 const TOKEN_KEY = 'jibunai_auth_token';
 
-const RAW_BASE = (process.env.EXPO_PUBLIC_API_URL || '').replace(/\/+$/, '');
+/**
+ * Deployed API host used when EXPO_PUBLIC_API_URL is missing at bundle time.
+ *
+ * EAS Build keeps the literal `${{EXPO_PUBLIC_API_URL}}` when the referenced
+ * environment variable is not defined. That shipped a base URL like
+ * `${{EXPO_PUBLIC_API_URL}}/api`, so every request failed with "Couldn't reach
+ * the server" even though the backend was healthy. Never let an unresolved
+ * template become the API base — validate it and fall back to production.
+ */
+const PRODUCTION_API_URL = 'https://portfolio-79vi.onrender.com';
 
-export const API_BASE = RAW_BASE ? `${RAW_BASE}/api` : '';
+function resolveApiUrl(value) {
+  const raw = String(value ?? '').trim().replace(/\/+$/, '');
+  // Empty, unresolved EAS template, or anything that is not an http(s) URL.
+  if (!raw || raw.includes('${{') || !/^https?:\/\//i.test(raw)) return '';
+  return raw;
+}
+
+const ENV_API_URL = resolveApiUrl(process.env.EXPO_PUBLIC_API_URL);
+
+export const API_BASE = `${ENV_API_URL || PRODUCTION_API_URL}/api`;
 
 /** Cheap liveness probe (200 + DB check). Use for connectivity, not bare `/api`. */
 export const HEALTH_PATH = '/health/';
@@ -30,18 +48,10 @@ async function withAuth(headers = {}) {
   return token ? { ...headers, Authorization: `Bearer ${token}` } : headers;
 }
 
-const assertBase = () => {
-  if (!API_BASE) {
-    throw new ApiError(
-      'Missing EXPO_PUBLIC_API_URL — add it to .env / EAS secrets (see .env.example).',
-      0,
-    );
-  }
-};
-
-// Render's free tier sleeps: the first request after idle measured ~18 s.
-// Keep the default above that so a cold start reads as "slow", not "offline".
-const DEFAULT_TIMEOUT = 30_000;
+// Render's free tier sleeps. The first request after idle has been measured at
+// ~35 s, so a 30 s ceiling aborted the response and looked like an outage.
+// Keep this comfortably above the observed cold-start time.
+const DEFAULT_TIMEOUT = 45_000;
 
 export class ApiError extends Error {
   constructor(message, status) {
@@ -121,7 +131,6 @@ const errorMessage = (payload, status) => {
 
 /** GET a JSON resource. */
 export async function apiGet(path, { timeout = DEFAULT_TIMEOUT, signal, headers = {} } = {}) {
-  assertBase();
   const res = await withTimeout(
     `${API_BASE}${path}`,
     { method: 'GET', headers: await withAuth(headers) },
@@ -148,7 +157,6 @@ export async function apiSend(
   body = null,
   { timeout = DEFAULT_TIMEOUT, headers = {} } = {},
 ) {
-  assertBase();
   const res = await withTimeout(
     `${API_BASE}${path}`,
     {
@@ -166,7 +174,6 @@ export async function apiSend(
 
 /** POST (or PATCH) a multipart payload (image uploads). */
 export async function apiUpload(path, formData, { timeout = 60_000, method = 'POST', headers = {} } = {}) {
-  assertBase();
   const res = await withTimeout(
     `${API_BASE}${path}`,
     { method, headers: await withAuth(headers), body: formData },
